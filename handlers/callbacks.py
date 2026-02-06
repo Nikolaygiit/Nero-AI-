@@ -9,6 +9,7 @@ from database import db
 from services.gemini import gemini_service
 from services.image_gen import image_generator
 from handlers.media import handle_photo
+from utils.i18n import t
 import config
 
 logger = logging.getLogger(__name__)
@@ -564,6 +565,43 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await safe_edit_message(text, reply_markup)
         return
     
+    # Перегенерировать ответ (Retry)
+    elif data.startswith("retry_"):
+        last_prompt = (context.user_data or {}).get("last_prompt")
+        if not last_prompt:
+            await query.answer("Нет последнего запроса для перегенерации", show_alert=True)
+            return
+        await query.answer("🔄 Перегенерирую...")
+        from handlers.chat import generate_and_reply_text
+        from utils.text_tools import sanitize_markdown
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        status_msg = await query.message.reply_text(t("thinking"))
+        try:
+            response = await generate_and_reply_text(
+                chat=query.message.chat,
+                user_id=user_id,
+                prompt=last_prompt,
+                context=context,
+            )
+            await status_msg.delete()
+            keyboard = [
+                [
+                    InlineKeyboardButton(t("btn_favorite"), callback_data=f"fav_{user_id}"),
+                    InlineKeyboardButton(t("btn_regenerate"), callback_data=f"retry_{user_id}"),
+                ],
+                [InlineKeyboardButton(t("btn_rephrase"), callback_data=f"rephrase_{user_id}")],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            safe = sanitize_markdown(response)
+            await query.message.reply_text(safe, parse_mode="Markdown", reply_markup=reply_markup)
+        except Exception as e:
+            logger.error("Retry error: %s", e)
+            await status_msg.edit_text(t("error_generic") + f": {str(e)[:200]}")
+        return
+
     # Обработка избранного
     elif data.startswith("fav_"):
         original_text = query.message.text or query.message.caption or ""
@@ -574,7 +612,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             content_type='image' if query.message.photo else 'text'
         )
         
-        await query.answer("⭐ Добавлено в избранное!")
+        await query.answer(t("favorite_added"))
         try:
             await query.edit_message_reply_markup(reply_markup=None)
         except:

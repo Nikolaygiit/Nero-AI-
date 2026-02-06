@@ -8,12 +8,13 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
+    PreCheckoutQueryHandler,
     filters,
-    ContextTypes
+    ContextTypes,
 )
 from telegram.request import HTTPXRequest
 
-# Импорты модулей
+# Импорты модулей (config валидирует ключи при импорте — бот не запустится без них)
 import config
 from database import db
 from handlers.basic import start_command, help_command, clear_command
@@ -27,30 +28,14 @@ from handlers.commands import (
     image_command, settings_command
 )
 from handlers.admin import broadcast_command, users_command, logs_command
+from handlers.payments import subscribe_command, pre_checkout_handler, successful_payment_handler
+from handlers.conversation import get_wizard_conversation_handler
+from utils.logging_config import setup_logging
+from utils.error_middleware import global_error_handler
 
-# Настройка логирования
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO,
-    handlers=[
-        logging.FileHandler('bot.log', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
+# Логирование с ротацией файлов (5 MB, 3 резервных копии)
+setup_logging()
 logger = logging.getLogger(__name__)
-
-
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-    """Глобальный обработчик ошибок"""
-    logger.error(f"Ошибка: {context.error}", exc_info=context.error)
-    
-    if isinstance(update, Update) and update.effective_message:
-        try:
-            await update.effective_message.reply_text(
-                "❌ Произошла ошибка при обработке запроса. Пожалуйста, попробуйте еще раз."
-            )
-        except:
-            pass
 
 
 async def post_init(_application):
@@ -68,16 +53,8 @@ async def post_shutdown(_application):
 def main():
     """Основная функция запуска бота"""
     logger.info("Инициализация бота...")
-    
-    # Проверка конфигурации
-    if not config.TELEGRAM_BOT_TOKEN:
-        logger.error("Установите TELEGRAM_BOT_TOKEN в файле .env!")
-        return
-    
-    if not config.GEMINI_API_KEY:
-        logger.error("Установите ARTEMOX_API_KEY в файле .env!")
-        return
-    
+    # Конфигурация валидирована при импорте (pydantic-settings) — ключи обязательны
+
     # Создание приложения (post_init/post_shutdown для работы с БД)
     # Уменьшенные таймауты для быстрого отклика, увеличен pool для параллельных запросов
     try:
@@ -123,17 +100,22 @@ def main():
     application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(CommandHandler("users", users_command))
     application.add_handler(CommandHandler("logs", logs_command))
-    
+    application.add_handler(CommandHandler("subscribe", subscribe_command))
+    application.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
+    application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
+
     # Регистрация обработчиков сообщений
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     application.add_handler(MessageHandler(filters.VOICE, handle_voice))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    # Регистрация обработчика callback кнопок
+    # ConversationHandler для /wizard (пошаговая настройка)
+    application.add_handler(get_wizard_conversation_handler())
+    # Обработчик callback кнопок
     application.add_handler(CallbackQueryHandler(button_callback))
     
-    # Глобальный обработчик ошибок
-    application.add_error_handler(error_handler)
+    # Централизованная обработка ошибок: лог в файл + пользователю "Что-то пошло не так" + админу трейсбек
+    application.add_error_handler(global_error_handler)
     
     # Запуск бота (run_polling управляет event loop самостоятельно)
     logger.info("Бот запущен...")

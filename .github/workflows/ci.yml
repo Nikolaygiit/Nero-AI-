@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Lint
+        run: ruff check . --output-format=github
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+
+      - name: Run tests
+        run: pytest tests/ -v
+        env:
+          ARTEMOX_API_KEY: test_key
+          TELEGRAM_BOT_TOKEN: test_token
+
+  # Deploy (раскомментируйте и настройте под свой сервер)
+  # deploy:
+  #   needs: [lint, test]
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main'
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Deploy to server
+  #       run: |
+  #         # Пример: docker build && docker push
+  #         # или: ssh user@server 'cd app && git pull && docker-compose up -d'
+  #         echo "Add your deploy steps"

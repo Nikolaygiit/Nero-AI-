@@ -6,6 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database import db
 from services.gemini import gemini_service
+from utils.analytics import track
 import config
 
 logger = logging.getLogger(__name__)
@@ -88,8 +89,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
     
-    # Обновляем статистику
     await db.update_stats(user_id, command='start')
+    track("started_bot", str(user_id))
     
     # Получаем пользователя для проверки
     user = await db.get_user(user_id)

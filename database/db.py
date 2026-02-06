@@ -5,8 +5,13 @@ import json
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from sqlalchemy import select, delete, func
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from .models import Base, User, Message, Stats, Favorite, Achievement
+from sqlalchemy.ext.asyncio import (
+    create_async_engine,
+    AsyncSession,
+    async_sessionmaker,
+    AsyncEngine,
+)
+from .models import Base, User, Message, Stats, Favorite, Achievement, UserFact, Subscription, UsageDaily
 import logging
 
 logger = logging.getLogger(__name__)
@@ -17,13 +22,16 @@ DB_PATH = 'bot_database.db'
 
 class Database:
     """Класс для работы с базой данных"""
-    
-    def __init__(self, db_path: str = DB_PATH):
+
+    engine: AsyncEngine | None
+    async_session: async_sessionmaker[AsyncSession] | None
+
+    def __init__(self, db_path: str = DB_PATH) -> None:
         self.db_path = db_path
-        self.engine = None
-        self.async_session = None
-    
-    async def init(self):
+        self.engine: AsyncEngine | None = None
+        self.async_session: async_sessionmaker[AsyncSession] | None = None
+
+    async def init(self) -> None:
         """Инициализация базы данных"""
         # Создаем асинхронный движок SQLite
         self.engine = create_async_engine(
@@ -44,7 +52,7 @@ class Database:
         
         logger.info(f"База данных инициализирована: {self.db_path}")
     
-    async def close(self):
+    async def close(self) -> None:
         """Закрытие соединения с базой данных"""
         if self.engine:
             await self.engine.dispose()
@@ -77,7 +85,7 @@ class Database:
         telegram_id: int,
         username: Optional[str] = None,
         first_name: Optional[str] = None,
-        **kwargs
+        **kwargs: Any,
     ) -> User:
         """Создать или обновить пользователя"""
         async with self.async_session() as session:
@@ -109,7 +117,7 @@ class Database:
     
     # ========== Работа с сообщениями ==========
     
-    async def add_message(self, user_id: int, role: str, content: str):
+    async def add_message(self, user_id: int, role: str, content: str) -> None:
         """Добавить сообщение в историю"""
         async with self.async_session() as session:
             message = Message(
@@ -136,7 +144,7 @@ class Database:
             messages = result.scalars().all()
             return list(reversed(messages))  # Возвращаем в хронологическом порядке
     
-    async def clear_user_messages(self, user_id: int):
+    async def clear_user_messages(self, user_id: int) -> None:
         """Очистить историю сообщений пользователя"""
         async with self.async_session() as session:
             await session.execute(
@@ -160,8 +168,8 @@ class Database:
         requests_count: Optional[int] = None,
         tokens_used: Optional[int] = None,
         images_generated: Optional[int] = None,
-        command: Optional[str] = None
-    ):
+        command: Optional[str] = None,
+    ) -> None:
         """Обновить статистику пользователя"""
         async with self.async_session() as session:
             # Получаем статистику через текущую сессию
@@ -228,7 +236,7 @@ class Database:
     
     # ========== Работа с достижениями ==========
     
-    async def add_achievement(self, user_id: int, achievement_id: str):
+    async def add_achievement(self, user_id: int, achievement_id: str) -> None:
         """Добавить достижение пользователю"""
         async with self.async_session() as session:
             # Проверяем, есть ли уже это достижение
@@ -256,6 +264,93 @@ class Database:
                 .where(Achievement.user_id == user_id)
             )
             return [row[0] for row in result.all()]
+
+    # ========== RAG Lite: факты о пользователе ==========
+
+    async def add_user_fact(self, user_id: int, fact_type: str, fact_value: str) -> None:
+        """Добавить факт о пользователе (дедупликация по типу: храним последний)"""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(UserFact).where(
+                    UserFact.user_id == user_id,
+                    UserFact.fact_type == fact_type,
+                )
+            )
+            existing = result.scalar_one_or_none()
+            if existing:
+                existing.fact_value = fact_value
+            else:
+                session.add(UserFact(user_id=user_id, fact_type=fact_type, fact_value=fact_value))
+            await session.commit()
+
+    async def get_user_facts(self, user_id: int, limit: int = 5) -> List[UserFact]:
+        """Получить последние факты пользователя"""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(UserFact)
+                .where(UserFact.user_id == user_id)
+                .order_by(UserFact.created_at.desc())
+                .limit(limit)
+            )
+            return list(result.scalars().all())
+
+    # ========== Подписка и лимиты ==========
+
+    async def is_premium(self, user_id: int) -> bool:
+        """Проверка премиум-подписки"""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(Subscription).where(
+                    Subscription.user_id == user_id,
+                    Subscription.tier == "premium",
+                )
+            )
+            return result.scalar_one_or_none() is not None
+
+    async def get_daily_usage(self, user_id: int, date_str: str) -> int:
+        """Получить количество запросов за день"""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(UsageDaily).where(
+                    UsageDaily.user_id == user_id,
+                    UsageDaily.date == date_str,
+                )
+            )
+            row = result.scalar_one_or_none()
+            return row.count if row else 0
+
+    async def increment_daily_usage(self, user_id: int, date_str: str) -> int:
+        """Увеличить счётчик за день, вернуть новое значение"""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(UsageDaily).where(
+                    UsageDaily.user_id == user_id,
+                    UsageDaily.date == date_str,
+                )
+            )
+            row = result.scalar_one_or_none()
+            if row:
+                row.count += 1
+                count = row.count
+            else:
+                session.add(UsageDaily(user_id=user_id, date=date_str, count=1))
+                count = 1
+            await session.commit()
+            return count
+
+    async def set_premium(self, user_id: int) -> None:
+        """Установить премиум-подписку"""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(Subscription).where(Subscription.user_id == user_id)
+            )
+            sub = result.scalar_one_or_none()
+            if sub:
+                sub.tier = "premium"
+                sub.stars_paid_at = datetime.utcnow()
+            else:
+                session.add(Subscription(user_id=user_id, tier="premium"))
+            await session.commit()
 
 
 # Глобальный экземпляр базы данных

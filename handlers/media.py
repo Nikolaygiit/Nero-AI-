@@ -1,15 +1,18 @@
 """
-Обработчики медиа (фото, голос)
+Обработчики медиа (фото, голос) — Vision + Whisper
 """
 import logging
 import base64
 from utils.text_tools import sanitize_markdown
+from utils.analytics import track
 from io import BytesIO
 from telegram import Update
 from telegram.ext import ContextTypes
 from database import db
 from services.gemini import gemini_service
+from services.speech import speech_to_text
 from middlewares.rate_limit import rate_limit_middleware
+from middlewares.usage_limit import check_can_make_request
 
 logger = logging.getLogger(__name__)
 
@@ -18,15 +21,18 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка загруженных фотографий"""
     user_id = update.effective_user.id
     
-    # Проверка rate limit
     if not await rate_limit_middleware.check_rate_limit(user_id):
         await update.message.reply_text(
-            f"⏳ Слишком много запросов. Подождите {rate_limit_middleware.time_window} секунд.",
+            f"⏳ Слишком много запросов. Подождите {rate_limit_middleware.time_window} сек.",
             parse_mode=None
         )
         return
-    
-    photo = update.message.photo[-1]  # Берем самое большое разрешение
+    can_proceed, limit_msg = await check_can_make_request(user_id)
+    if not can_proceed:
+        await update.message.reply_text(limit_msg, parse_mode=None)
+        return
+
+    photo = update.message.photo[-1]
     file = await context.bot.get_file(photo.file_id)
     
     caption = update.message.caption or "Опиши это изображение подробно на русском языке"
@@ -61,7 +67,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_id=user_id
         )
         
-        # Отправляем результат
+        track("analyzed_image", str(user_id))
         safe_analysis = sanitize_markdown(analysis)
         await analysis_msg.edit_text(f"📸 **Анализ изображения:**\n\n{safe_analysis}", parse_mode='Markdown')
         
@@ -71,27 +77,33 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка голосовых сообщений"""
+    """Обработка голосовых сообщений — Whisper STT, затем обработка как текст"""
     user_id = update.effective_user.id
     voice = update.message.voice
-    
     if not voice:
         return
-    
+
+    can_proceed, limit_msg = await check_can_make_request(user_id)
+    if not can_proceed:
+        await update.message.reply_text(limit_msg, parse_mode=None)
+        return
+
     processing_msg = await update.message.reply_text("🎤 Распознаю речь...")
-    
     try:
-        # Скачиваем голосовое сообщение
         file = await context.bot.get_file(voice.file_id)
         voice_bytes = await file.download_as_bytearray()
-        
-        # TODO: Реализовать распознавание речи через Whisper API или другой сервис
-        # Пока что отправляем сообщение об ошибке
-        await processing_msg.edit_text(
-            "⚠️ Распознавание речи пока не реализовано.\n\n"
-            "💡 Отправьте текстовое сообщение вместо голосового."
-        )
-        
+        text = await speech_to_text(bytes(voice_bytes))
+        if not text:
+            await processing_msg.edit_text(
+                "⚠️ Не удалось распознать речь.\n💡 Проверьте качество записи или напишите текстом."
+            )
+            return
+        await processing_msg.delete()
+        track("voice_transcribed", str(user_id))
+        # Подставляем распознанный текст как новое сообщение — перенаправляем в handle_message
+        from handlers.chat import handle_message
+        update.message.text = text
+        await handle_message(update, context)
     except Exception as e:
-        logger.error(f"Ошибка обработки голосового сообщения: {e}")
-        await processing_msg.edit_text(f"❌ Ошибка обработки голосового сообщения: {str(e)[:200]}")
+        logger.error("Ошибка голосового: %s", e)
+        await processing_msg.edit_text(f"❌ Ошибка: {str(e)[:200]}")

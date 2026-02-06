@@ -107,8 +107,12 @@ class GeminiService:
                 persona_key = user.persona or 'assistant'
                 persona_prompt = config.PERSONAS.get(persona_key, config.PERSONAS['assistant'])['prompt']
         
+        # RAG Lite: добавляем факты о пользователе в контекст
+        from services.memory import get_relevant_facts
+        facts_block = await get_relevant_facts(user_id)
+        facts_line = f"\n\n{facts_block}" if facts_block else ""
         # Формируем системное сообщение
-        system_prompt = f"{persona_prompt}\n\nВажно: Отвечай на русском языке. Будь естественным и понятным."
+        system_prompt = f"{persona_prompt}{facts_line}\n\nВажно: Отвечай на русском языке. Будь естественным и понятным."
         
         # Формируем сообщения для API
         messages = [{"role": "system", "content": system_prompt}]
@@ -242,7 +246,10 @@ class GeminiService:
                 persona_key = user.persona or 'assistant'
                 persona_prompt = config.PERSONAS.get(persona_key, config.PERSONAS['assistant'])['prompt']
 
-        system_prompt = f"{persona_prompt}\n\nВажно: Отвечай на русском языке."
+        from services.memory import get_relevant_facts
+        facts_block = await get_relevant_facts(user_id) if user_id else ""
+        facts_line = f"\n\n{facts_block}" if facts_block else ""
+        system_prompt = f"{persona_prompt}{facts_line}\n\nВажно: Отвечай на русском языке."
         messages = [{"role": "system", "content": system_prompt}]
         for msg in context_messages[-10:]:
             messages.append({"role": msg['role'], "content": msg['content']})
@@ -308,7 +315,10 @@ class GeminiService:
                 persona_key = user.persona or 'assistant'
                 persona_prompt = config.PERSONAS.get(persona_key, config.PERSONAS['assistant'])['prompt']
 
-        system_prompt = f"{persona_prompt}\n\nВажно: Отвечай на русском языке. Учитывай изображение в контексте."
+        from services.memory import get_relevant_facts
+        facts_block = await get_relevant_facts(user_id) if user_id else ""
+        facts_line = f"\n\n{facts_block}" if facts_block else ""
+        system_prompt = f"{persona_prompt}{facts_line}\n\nВажно: Отвечай на русском языке. Учитывай изображение в контексте."
         messages = [{"role": "system", "content": system_prompt}]
         for msg in context_messages[-8:]:
             messages.append({"role": msg['role'], "content": msg['content']})
