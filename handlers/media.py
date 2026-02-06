@@ -3,6 +3,7 @@
 """
 import logging
 import base64
+from utils.text_tools import sanitize_markdown
 from io import BytesIO
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -48,6 +49,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Конвертируем в base64
         image_base64 = base64.b64encode(photo_bytes).decode('utf-8')
+
+        # Сохраняем в контексте для мультимодального диалога (вопросы о картинке в чате)
+        if context.user_data is not None:
+            context.user_data['last_image_base64'] = image_base64
         
         # Анализируем через Gemini Vision
         analysis = await gemini_service.analyze_image(
@@ -57,7 +62,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         # Отправляем результат
-        await analysis_msg.edit_text(f"📸 **Анализ изображения:**\n\n{analysis}", parse_mode='Markdown')
+        safe_analysis = sanitize_markdown(analysis)
+        await analysis_msg.edit_text(f"📸 **Анализ изображения:**\n\n{safe_analysis}", parse_mode='Markdown')
         
     except Exception as e:
         logger.error(f"Ошибка анализа изображения: {e}")

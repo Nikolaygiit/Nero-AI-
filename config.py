@@ -8,10 +8,13 @@ from typing import List
 # Загрузка переменных окружения
 load_dotenv()
 
-# API ключи (Gemini через Artemox API)
-GEMINI_API_KEY = os.getenv('ARTEMOX_API_KEY', 'sk-FAeVBJo2ndVXyc6gLGQf8A')
+# API ключи — строго из .env, без дефолтных значений (безопасность)
+GEMINI_API_KEY = os.getenv('ARTEMOX_API_KEY', '')
 GEMINI_API_BASE = os.getenv('ARTEMOX_API_BASE', 'https://api.artemox.com/v1')
-TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '8561154208:AAEXV-VgSi58jGocek5sjPPwUuJ5CCM0jVU')
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
+
+# ID администраторов (для /broadcast, /users, /logs)
+ADMIN_IDS: List[int] = [int(x) for x in os.getenv('ADMIN_IDS', '').split(',') if x.strip()]
 
 # Модели для текста
 PREFERRED_MODELS: List[str] = [

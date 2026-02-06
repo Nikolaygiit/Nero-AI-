@@ -26,6 +26,7 @@ from handlers.commands import (
     random_command, code_command, persona_command, stats_command,
     image_command, settings_command
 )
+from handlers.admin import broadcast_command, users_command, logs_command
 
 # Настройка логирования
 logging.basicConfig(
@@ -69,11 +70,11 @@ def main():
     logger.info("Инициализация бота...")
     
     # Проверка конфигурации
-    if not config.TELEGRAM_BOT_TOKEN or config.TELEGRAM_BOT_TOKEN == 'YOUR_TELEGRAM_BOT_TOKEN_HERE':
+    if not config.TELEGRAM_BOT_TOKEN:
         logger.error("Установите TELEGRAM_BOT_TOKEN в файле .env!")
         return
     
-    if not config.GEMINI_API_KEY or config.GEMINI_API_KEY == 'YOUR_API_KEY_HERE':
+    if not config.GEMINI_API_KEY:
         logger.error("Установите ARTEMOX_API_KEY в файле .env!")
         return
     
@@ -119,6 +120,9 @@ def main():
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("image", image_command))
     application.add_handler(CommandHandler("settings", settings_command))
+    application.add_handler(CommandHandler("broadcast", broadcast_command))
+    application.add_handler(CommandHandler("users", users_command))
+    application.add_handler(CommandHandler("logs", logs_command))
     
     # Регистрация обработчиков сообщений
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))

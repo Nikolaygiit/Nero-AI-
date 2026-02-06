@@ -1,6 +1,7 @@
 """
-Сервис генерации изображений с паттерном Strategy
+Сервис генерации изображений с паттерном Strategy и очередью
 """
+import asyncio
 import httpx
 import base64
 import logging
@@ -10,6 +11,10 @@ import config
 from database import db
 
 logger = logging.getLogger(__name__)
+
+# Счётчик активных генераций (для отображения позиции в очереди)
+_active_generations = 0
+_gen_lock = asyncio.Lock()
 
 
 class ImageGeneratorStrategy(ABC):
@@ -180,3 +185,25 @@ class ImageGenerator:
 
 # Глобальный экземпляр генератора изображений
 image_generator = ImageGenerator()
+
+
+async def get_queue_position() -> int:
+    """Возвращает количество активных генераций + 1 (позиция нового запроса)"""
+    async with _gen_lock:
+        return _active_generations + 1
+
+
+async def generate_with_queue(prompt: str, user_id: int, style: Optional[str] = None, size: Optional[str] = None) -> Tuple[bytes, str]:
+    """
+    Генерация с отображением позиции в очереди.
+    """
+    global _active_generations
+    async with _gen_lock:
+        _active_generations += 1
+        position = _active_generations
+
+    try:
+        return await image_generator.generate(prompt, user_id, style, size)
+    finally:
+        async with _gen_lock:
+            _active_generations = max(0, _active_generations - 1)

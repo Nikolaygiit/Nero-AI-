@@ -7,8 +7,9 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database import db
 from services.gemini import gemini_service
-from services.image_gen import image_generator
+from services.image_gen import image_generator, generate_with_queue, get_queue_position
 from middlewares.rate_limit import rate_limit_middleware
+from utils.text_tools import sanitize_markdown
 import config
 
 logger = logging.getLogger(__name__)
@@ -41,10 +42,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             prompt = "красивое изображение"
         
         await update.message.reply_chat_action("upload_photo")
-        status_msg = await update.message.reply_text("🎨 Генерирую изображение...")
+        position = await get_queue_position()
+        status_text = "🎨 Генерирую изображение..."
+        if position > 1:
+            status_text = f"⏳ Вы {position}-й в очереди, ожидайте..."
+        status_msg = await update.message.reply_text(status_text)
         
         try:
-            image_bytes, strategy_name = await image_generator.generate(prompt, user_id)
+            image_bytes, strategy_name = await generate_with_queue(prompt, user_id)
             
             # Отправляем изображение
             from io import BytesIO
@@ -69,17 +74,56 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await status_msg.edit_text(f"❌ Ошибка генерации изображения: {str(e)[:200]}")
         return
     
-    # Обычная обработка текста
+    # Мультимодальный контекст: вопрос о ранее отправленном изображении
+    last_image = context.user_data.get('last_image_base64') if context.user_data else None
+    if last_image and len(user_message) > 5:
+        await update.message.reply_chat_action("typing")
+        try:
+            response = await gemini_service.generate_with_image_context(
+                prompt=user_message,
+                image_base64=last_image,
+                user_id=user_id,
+                use_context=True
+            )
+            context.user_data.pop('last_image_base64', None)
+            safe_response = sanitize_markdown(response)
+            await update.message.reply_text(safe_response, parse_mode='Markdown')
+            return
+        except Exception as e:
+            logger.error(f"Ошибка мультимодального ответа: {e}")
+            context.user_data.pop('last_image_base64', None)
+
+    # Обычная обработка текста (потоковая генерация)
+    context.user_data.pop('last_image_base64', None)
     await update.message.reply_chat_action("typing")
-    
+
     try:
-        # Генерируем ответ через Gemini
-        response = await gemini_service.generate_content(
-            prompt=user_message,
-            user_id=user_id,
-            use_context=True
-        )
-        
+        status_msg = await update.message.reply_text("⏳ Думаю...")
+        accumulated = ""
+        try:
+            async for chunk in gemini_service.generate_content_stream(
+                prompt=user_message,
+                user_id=user_id,
+                use_context=True
+            ):
+                accumulated += chunk
+                if len(accumulated) > 100 and len(accumulated) % 200 < len(chunk):
+                    try:
+                        safe = sanitize_markdown(accumulated)
+                        await status_msg.edit_text(safe, parse_mode='Markdown')
+                    except Exception:
+                        pass
+            response = accumulated
+        except Exception as stream_err:
+            logger.warning(f"Stream error, fallback: {stream_err}")
+            response = await gemini_service.generate_content(
+                prompt=user_message, user_id=user_id, use_context=True
+            )
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+
         # Разбиваем длинные сообщения на части (лимит Telegram - 4096 символов)
         if len(response) > 4096:
             # Разбиваем по абзацам
@@ -111,9 +155,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         ]
                     ]
                     reply_markup = InlineKeyboardMarkup(keyboard)
-                    await update.message.reply_text(part, parse_mode='Markdown', reply_markup=reply_markup)
+                    safe_part = sanitize_markdown(part)
+                    await update.message.reply_text(safe_part, parse_mode='Markdown', reply_markup=reply_markup)
                 else:
-                    await update.message.reply_text(part, parse_mode='Markdown')
+                    safe_part = sanitize_markdown(part)
+                    await update.message.reply_text(safe_part, parse_mode='Markdown')
         else:
             # Обычное сообщение с кнопками
             keyboard = [
@@ -123,7 +169,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(response, parse_mode='Markdown', reply_markup=reply_markup)
+            safe_response = sanitize_markdown(response)
+            await update.message.reply_text(safe_response, parse_mode='Markdown', reply_markup=reply_markup)
             
     except Exception as e:
         logger.error(f"Ошибка обработки сообщения: {e}")

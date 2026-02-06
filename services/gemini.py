@@ -3,7 +3,8 @@
 """
 import httpx
 import logging
-from typing import Optional, List, Dict, Any
+import json
+from typing import Optional, List, Dict, Any, AsyncGenerator
 from datetime import datetime
 import config
 from database import db
@@ -217,6 +218,128 @@ class GeminiService:
         # Если все модели не сработали
         error_msg = last_error or "Не удалось получить ответ от API"
         raise Exception(f"{error_msg}. Проверьте подключение к интернету и правильность API ключа.")
+
+    async def generate_content_stream(
+        self,
+        prompt: str,
+        user_id: Optional[int] = None,
+        use_context: bool = True,
+        model: Optional[str] = None
+    ) -> AsyncGenerator[str, None]:
+        """
+        Потоковая генерация текста — обновление сообщения по мере получения токенов.
+        Yields: части текста для обновления сообщения.
+        """
+        available_models = await self.list_available_models()
+        context_messages = []
+        persona_prompt = config.PERSONAS['assistant']['prompt']
+
+        if user_id and use_context:
+            messages = await db.get_user_messages(user_id, limit=10)
+            context_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
+            user = await db.get_user(user_id)
+            if user:
+                persona_key = user.persona or 'assistant'
+                persona_prompt = config.PERSONAS.get(persona_key, config.PERSONAS['assistant'])['prompt']
+
+        system_prompt = f"{persona_prompt}\n\nВажно: Отвечай на русском языке."
+        messages = [{"role": "system", "content": system_prompt}]
+        for msg in context_messages[-10:]:
+            messages.append({"role": msg['role'], "content": msg['content']})
+        messages.append({"role": "user", "content": prompt})
+
+        models_to_try = [model] if model else available_models[:5] or config.PREFERRED_MODELS[:5]
+        url = f"{self.api_base}/chat/completions"
+        headers = {'Authorization': f'Bearer {self.api_key}', 'Content-Type': 'application/json'}
+
+        full_text = ""
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            for model_name in models_to_try:
+                try:
+                    data = {
+                        "model": model_name,
+                        "messages": messages,
+                        "temperature": 0.7,
+                        "max_tokens": config.MAX_TOKENS_PER_REQUEST,
+                        "stream": True
+                    }
+                    async with client.stream("POST", url, headers=headers, json=data) as response:
+                        if response.status_code != 200:
+                            continue
+                        async for line in response.aiter_lines():
+                            if line.startswith("data: ") and line != "data: [DONE]":
+                                try:
+                                    chunk = json.loads(line[6:])
+                                    delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                                    if delta:
+                                        full_text += delta
+                                        yield delta
+                                except json.JSONDecodeError:
+                                    pass
+                    if full_text and user_id:
+                        await db.add_message(user_id, "user", prompt)
+                        await db.add_message(user_id, "assistant", full_text.strip())
+                    return
+                except Exception as e:
+                    logger.warning(f"Stream error для {model_name}: {e}")
+                    continue
+        if not full_text:
+            text = await self.generate_content(prompt, user_id, use_context, model)
+            yield text
+
+    async def generate_with_image_context(
+        self,
+        prompt: str,
+        image_base64: str,
+        user_id: Optional[int] = None,
+        use_context: bool = True
+    ) -> str:
+        """
+        Мультимодальный диалог: ответ на вопрос о ранее отправленном изображении.
+        """
+        context_messages = []
+        persona_prompt = config.PERSONAS['assistant']['prompt']
+
+        if user_id and use_context:
+            messages = await db.get_user_messages(user_id, limit=8)
+            context_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
+            user = await db.get_user(user_id)
+            if user:
+                persona_key = user.persona or 'assistant'
+                persona_prompt = config.PERSONAS.get(persona_key, config.PERSONAS['assistant'])['prompt']
+
+        system_prompt = f"{persona_prompt}\n\nВажно: Отвечай на русском языке. Учитывай изображение в контексте."
+        messages = [{"role": "system", "content": system_prompt}]
+        for msg in context_messages[-8:]:
+            messages.append({"role": msg['role'], "content": msg['content']})
+        messages.append({
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+            ]
+        })
+
+        available_models = await self.list_available_models()
+        vision_models = [m for m in available_models if any(x in m.lower() for x in ['flash', 'pro', '1.5', '2.0', '2.5'])] or config.PREFERRED_MODELS[:3]
+        url = f"{self.api_base}/chat/completions"
+        headers = {'Authorization': f'Bearer {self.api_key}', 'Content-Type': 'application/json'}
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            for model_name in vision_models[:3]:
+                try:
+                    data = {"model": model_name, "messages": messages, "temperature": 0.7, "max_tokens": config.MAX_TOKENS_PER_REQUEST}
+                    response = await client.post(url, headers=headers, json=data)
+                    if response.status_code == 200:
+                        result = response.json()
+                        text = result.get('choices', [{}])[0].get('message', {}).get('content', '')
+                        if text and user_id:
+                            await db.add_message(user_id, "user", f"[Изображение] {prompt}")
+                            await db.add_message(user_id, "assistant", text.strip())
+                        return text.strip() if text else "Не удалось получить ответ."
+                except Exception as e:
+                    logger.warning(f"Vision error {model_name}: {e}")
+        return "Не удалось обработать изображение. Попробуйте ещё раз."
     
     async def analyze_image(
         self,

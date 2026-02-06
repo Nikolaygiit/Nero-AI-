@@ -4,7 +4,7 @@
 import json
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from .models import Base, User, Message, Stats, Favorite, Achievement
 import logging
@@ -59,6 +59,18 @@ class Database:
                 select(User).where(User.telegram_id == telegram_id)
             )
             return result.scalar_one_or_none()
+
+    async def get_all_telegram_ids(self) -> List[int]:
+        """Получить все telegram_id пользователей (для рассылки)"""
+        async with self.async_session() as session:
+            result = await session.execute(select(User.telegram_id))
+            return [row[0] for row in result.all()]
+
+    async def get_users_count(self) -> int:
+        """Получить количество пользователей"""
+        async with self.async_session() as session:
+            result = await session.execute(select(func.count(User.id)))
+            return result.scalar() or 0
     
     async def create_or_update_user(
         self,

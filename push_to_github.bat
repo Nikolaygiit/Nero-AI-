@@ -32,12 +32,9 @@ REM Добавление файлов
 echo Добавление файлов...
 git add .
 
-REM Коммит (без коммита ветка main не создаётся!)
+REM Коммит (создаёт новый коммит при наличии изменений)
 echo Создание коммита...
-git commit -m "Initial commit: Telegram bot with Gemini AI"
-if errorlevel 1 (
-    echo Коммит уже существует или нет изменений.
-)
+git commit -m "Update: Nero AI Telegram Bot" 2>nul
 
 REM Ветка main
 git branch -M main
