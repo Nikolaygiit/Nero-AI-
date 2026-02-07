@@ -25,7 +25,17 @@ class Settings(BaseSettings):
     REDIS_URL: str = Field(default="redis://localhost:6379/0", description="URL Redis для очередей")
     POSTHOG_API_KEY: str = Field(default="", description="PostHog project API key для аналитики")
     POSTHOG_HOST: str = Field(default="https://us.posthog.com", description="PostHog host")
-    OPENAI_API_KEY: str = Field(default="", description="OpenAI API key для Whisper (STT)")
+    OPENAI_API_KEY: str = Field(default="", description="OpenAI API key для Whisper (STT), fallback LLM")
+    DEEPSEEK_API_KEY: str = Field(default="", description="DeepSeek API key для fallback LLM")
+    ADMIN_PANEL_PASSWORD: str = Field(default="", description="Пароль для веб-админки (пусто = без защиты)")
+    # RAG: путь к ChromaDB, модель эмбеддингов (если API поддерживает /embeddings)
+    RAG_CHROMA_PATH: str = Field(default="data/chroma", description="Папка для векторной БД ChromaDB")
+    RAG_EMBEDDING_MODEL: str = Field(default="gemini-embedding-001", description="Модель для эмбеддингов (gemini-embedding-001 или text-embedding-004)")
+    # Webhooks (вместо polling для high load)
+    USE_WEBHOOKS: bool = Field(default=False, description="Использовать webhooks вместо polling")
+    WEBHOOK_URL: str = Field(default="", description="Полный URL: https://domain.com/webhook")
+    WEBHOOK_PORT: int = Field(default=8443, description="Порт для webhook")
+    METRICS_PORT: int = Field(default=9090, description="Порт Prometheus metrics")
 
     @field_validator("ADMIN_IDS", mode="before")
     @classmethod
@@ -47,13 +57,15 @@ class Settings(BaseSettings):
         return result
 
 
-# Загружаем и валидируем — при ошибке бот не запустится
+# Загружаем и валидируем при старте — без токена и ключей бот сразу сообщит об этом, а не упадёт через час
 try:
     settings = Settings()
 except Exception as e:
     raise SystemExit(
-        f"Ошибка конфигурации! Проверьте .env файл.\n"
-        f"Обязательны: ARTEMOX_API_KEY, TELEGRAM_BOT_TOKEN\n"
+        "Ошибка конфигурации! Бот не запустится без обязательных переменных.\n"
+        "Добавьте в файл .env в корне проекта:\n"
+        "  TELEGRAM_BOT_TOKEN=ваш_токен_от_BotFather\n"
+        "  ARTEMOX_API_KEY=ваш_api_ключ\n"
         f"Детали: {e}"
     )
 
@@ -62,8 +74,10 @@ GEMINI_API_KEY = settings.ARTEMOX_API_KEY
 GEMINI_API_BASE = settings.ARTEMOX_API_BASE
 TELEGRAM_BOT_TOKEN = settings.TELEGRAM_BOT_TOKEN
 ADMIN_IDS: List[int] = settings.admin_ids_list
+RAG_CHROMA_PATH = settings.RAG_CHROMA_PATH
+RAG_EMBEDDING_MODEL = settings.RAG_EMBEDDING_MODEL
 
-# Модели для текста
+# Модели для текста (чат, ответы)
 PREFERRED_MODELS: List[str] = [
     "gemini-2.0-flash",
     "gemini-1.5-flash-8b",
@@ -82,16 +96,27 @@ PREFERRED_MODELS: List[str] = [
 
 # Модели для генерации изображений
 IMAGE_GENERATION_MODELS: List[str] = [
-    "gemini-3-pro-image-preview",
-    "gemini-2.5-flash-image",
-    "gemini-2.5-flash-image-preview",
     "imagen-3.0-generate-002",
     "imagen-4.0-generate-001",
     "imagen-4.0-ultra-generate-001",
     "imagen-4.0-fast-generate-001",
     "imagen-3.0-generate-001",
     "imagen-3.0-fast-generate-001",
+    "gemini-2.5-flash-image-preview",
+    "gemini-2.5-flash-image",
+    "gemini-3-pro-image-preview",
 ]
+
+# Модели для эмбеддингов (RAG). По умолчанию text-embedding-004, альтернатива: gemini-embedding-001
+RAG_EMBEDDING_MODELS_AVAILABLE: List[str] = ["text-embedding-004", "gemini-embedding-001"]
+
+# Circuit Breaker + Model Cascading
+MODEL_TIMEOUT_SEC = 10  # таймаут одного запроса (переключение на fallback)
+CIRCUIT_FAILURE_THRESHOLD = 3  # после N ошибок модель отключается
+CIRCUIT_COOLDOWN_SEC = 60  # на сколько секунд отключать
+
+# Модель для извлечения фактов (лёгкая, быстрая)
+FACT_EXTRACTION_MODEL: str = "gemini-2.0-flash"
 
 # Настройки
 MAX_HISTORY_LENGTH = 20

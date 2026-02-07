@@ -20,10 +20,12 @@ if broker:
         prompt: str,
         chat_id: int,
         user_id: int,
+        style: str | None = None,
+        size: str | None = None,
     ) -> None:
         """Фоновая задача: генерирует изображение и отправляет пользователю."""
         try:
-            image_bytes, strategy = await image_generator.generate(prompt, user_id)
+            image_bytes, strategy = await image_generator.generate(prompt, user_id, style=style, size=size)
             bot = Bot(token=config.settings.TELEGRAM_BOT_TOKEN)
             photo = BytesIO(image_bytes)
             photo.name = "image.png"

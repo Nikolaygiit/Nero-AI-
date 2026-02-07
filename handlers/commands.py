@@ -11,7 +11,15 @@ from database import db
 from services.gemini import gemini_service
 from services.image_gen import image_generator
 from middlewares.rate_limit import rate_limit_middleware
+from utils.i18n import t
 import config
+
+try:
+    from tasks.image_tasks import generate_image_task
+    from tasks.broker import get_taskiq_queue_length
+except ImportError:
+    generate_image_task = None
+    get_taskiq_queue_length = None
 
 logger = logging.getLogger(__name__)
 
@@ -561,6 +569,7 @@ async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     prompt = " ".join(prompt_parts)
     user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
     
     # Проверка rate limit
     if not await rate_limit_middleware.check_rate_limit(user_id):
@@ -570,13 +579,34 @@ async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
+    # Очередь Taskiq: сразу ответ с позицией, результат пришлёт воркер
+    if generate_image_task is not None and get_taskiq_queue_length is not None:
+        try:
+            queue_len = await get_taskiq_queue_length()
+            await generate_image_task.kiq(
+                prompt=prompt,
+                chat_id=chat_id,
+                user_id=user_id,
+                style=style,
+                size=size,
+            )
+            position = queue_len + 1
+            if position > 1:
+                await update.message.reply_text(t("image_taken_queue", position=position), parse_mode=None)
+            else:
+                await update.message.reply_text(t("image_taken"), parse_mode=None)
+            await db.update_stats(user_id, command='image')
+            return
+        except Exception:
+            pass  # fallback на синхронную генерацию
+    
+    # Синхронная генерация (без Redis или при ошибке очереди)
     await update.message.reply_chat_action("upload_photo")
     status_msg = await update.message.reply_text("🎨 Генерирую изображение...")
     
     try:
         image_bytes, strategy_name = await image_generator.generate(prompt, user_id, style=style, size=size)
         
-        # Отправляем изображение
         from io import BytesIO
         photo_file = BytesIO(image_bytes)
         photo_file.name = "image.png"
@@ -591,12 +621,12 @@ async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         try:
             await status_msg.delete()
-        except:
+        except Exception:
             pass
         
         await db.update_stats(user_id, command='image')
     except Exception as e:
-        logger.error(f"Ошибка генерации изображения: {e}")
+        logger.error("image_generation_error", error=str(e), user_id=user_id)
         await status_msg.edit_text(f"❌ Ошибка генерации изображения: {str(e)[:200]}")
 
 

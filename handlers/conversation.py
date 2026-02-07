@@ -76,4 +76,5 @@ def get_wizard_conversation_handler() -> ConversationHandler:
             ],
         },
         fallbacks=[CommandHandler("cancel", wizard_cancel)],
+        per_message=True,  # CallbackQueryHandler отслеживается по каждому сообщению (убирает PTBUserWarning)
     )

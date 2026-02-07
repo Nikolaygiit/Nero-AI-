@@ -89,8 +89,9 @@ class Database:
     ) -> User:
         """Создать или обновить пользователя"""
         async with self.async_session() as session:
-            user = await self.get_user(telegram_id)
-            
+            result = await session.execute(select(User).where(User.telegram_id == telegram_id))
+            user = result.scalar_one_or_none()
+
             if user:
                 # Обновляем существующего пользователя
                 for key, value in kwargs.items():
@@ -351,6 +352,49 @@ class Database:
             else:
                 session.add(Subscription(user_id=user_id, tier="premium"))
             await session.commit()
+
+    async def remove_premium(self, user_id: int) -> None:
+        """Снять премиум-подписку"""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(Subscription).where(Subscription.user_id == user_id)
+            )
+            sub = result.scalar_one_or_none()
+            if sub:
+                sub.tier = "free"
+                sub.stars_paid_at = None
+                await session.commit()
+
+    async def ban_user(self, telegram_id: int) -> None:
+        """Забанить пользователя"""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(User).where(User.telegram_id == telegram_id)
+            )
+            user = result.scalar_one_or_none()
+            if user:
+                user.is_banned = True
+                await session.commit()
+
+    async def unban_user(self, telegram_id: int) -> None:
+        """Разбанить пользователя"""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(User).where(User.telegram_id == telegram_id)
+            )
+            user = result.scalar_one_or_none()
+            if user:
+                user.is_banned = False
+                await session.commit()
+
+    async def is_banned(self, telegram_id: int) -> bool:
+        """Проверить, забанен ли пользователь"""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(User.is_banned).where(User.telegram_id == telegram_id)
+            )
+            row = result.scalar_one_or_none()
+            return bool(row) if row is not None else False
 
 
 # Глобальный экземпляр базы данных

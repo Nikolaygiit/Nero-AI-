@@ -4,11 +4,14 @@ Taskiq worker — запуск: python -m tasks.worker
 """
 import subprocess
 import sys
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 if __name__ == "__main__":
     from .broker import broker
     if broker is None:
-        print("Redis недоступен, worker не запущен.", file=sys.stderr)
+        logger.error("worker_start_failed", reason="Redis недоступен")
         sys.exit(1)
     rc = subprocess.run(
         [

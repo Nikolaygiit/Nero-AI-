@@ -6,9 +6,12 @@ import shutil
 import time
 from pathlib import Path
 from datetime import datetime
+import structlog
 
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+
+logger = structlog.get_logger(__name__)
 
 # Настройки
 CHANGES_BEFORE_BACKUP = 5
@@ -49,7 +52,7 @@ def copy_project(src: Path, base_backup: Path):
 
     dst.mkdir(parents=True, exist_ok=True)
     shutil.copytree(src, dst, ignore=ignore_func)
-    print(f"\n[Backup] Резервная копия создана: {dst}")
+    logger.info("backup_created", backup_path=str(dst))
 
 
 class BackupHandler(FileSystemEventHandler):
@@ -76,7 +79,7 @@ class BackupHandler(FileSystemEventHandler):
             try:
                 copy_project(self.project_path, self.backup_path)
             except Exception as e:
-                print(f"[Backup] Ошибка: {e}")
+                logger.error("backup_failed", error=str(e))
 
     def on_modified(self, event):
         self._handle_change(event)
@@ -90,8 +93,7 @@ def main():
     backup_base = project_path.parent / BACKUP_BASE_FOLDER
     backup_base.mkdir(parents=True, exist_ok=True)
 
-    print(f"Наблюдатель запущен. Каждые {CHANGES_BEFORE_BACKUP} изменений → бэкап в {backup_base}/<дата-время>/")
-    print("Нажмите Ctrl+C для остановки.\n")
+    logger.info("backup_watcher_started", changes_threshold=CHANGES_BEFORE_BACKUP, backup_path=str(backup_base))
 
     event_handler = BackupHandler(project_path, backup_base)
     observer = Observer()
@@ -103,7 +105,7 @@ def main():
             time.sleep(1)
     except KeyboardInterrupt:
         observer.stop()
-        print("\nНаблюдатель остановлен.")
+        logger.info("backup_watcher_stopped")
 
 
 if __name__ == "__main__":

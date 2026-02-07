@@ -70,7 +70,8 @@ class GeminiService:
         prompt: str,
         user_id: Optional[int] = None,
         use_context: bool = True,
-        model: Optional[str] = None
+        model: Optional[str] = None,
+        rag_context: Optional[str] = None,
     ) -> str:
         """
         Генерация контента через Gemini API
@@ -111,8 +112,10 @@ class GeminiService:
         from services.memory import get_relevant_facts
         facts_block = await get_relevant_facts(user_id)
         facts_line = f"\n\n{facts_block}" if facts_block else ""
+        # RAG: контекст из загруженных документов (PDF)
+        rag_block = f"\n\n{rag_context}" if rag_context else ""
         # Формируем системное сообщение
-        system_prompt = f"{persona_prompt}{facts_line}\n\nВажно: Отвечай на русском языке. Будь естественным и понятным."
+        system_prompt = f"{persona_prompt}{facts_line}{rag_block}\n\nВажно: Отвечай на русском языке. Будь естественным и понятным."
         
         # Формируем сообщения для API
         messages = [{"role": "system", "content": system_prompt}]
@@ -143,6 +146,28 @@ class GeminiService:
         else:
             models_to_try = config.PREFERRED_MODELS[:5]
         
+        # Каскадный вызов через llm_cascade (Circuit Breaker + fallback DeepSeek/OpenAI)
+        try:
+            from services.llm_cascade import chat_completion
+            text, model_used, tokens = await chat_completion(
+                messages=messages,
+                max_tokens=config.MAX_TOKENS_PER_REQUEST,
+                stream=False,
+                model_hint=model,
+            )
+            current_model_name = model_used
+            if user_id:
+                await db.add_message(user_id, "user", prompt)
+                await db.add_message(user_id, "assistant", text)
+                await db.update_stats(user_id, requests_count=1, tokens_used=tokens)
+                user = await db.get_user(user_id)
+                if not user:
+                    await db.create_or_update_user(telegram_id=user_id)
+            return text
+        except Exception as cascade_err:
+            logger.warning(f"Cascade failed, trying legacy loop: {cascade_err}")
+            pass  # fallback to legacy loop below
+
         url = f"{self.api_base}/chat/completions"
         headers = {
             'Authorization': f'Bearer {self.api_key}',
@@ -150,8 +175,9 @@ class GeminiService:
         }
         
         last_error = None
+        timeout_sec = getattr(config, "MODEL_TIMEOUT_SEC", 10) or 10
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=float(timeout_sec)) as client:
             for model_name in models_to_try:
                 try:
                     data = {
@@ -228,7 +254,8 @@ class GeminiService:
         prompt: str,
         user_id: Optional[int] = None,
         use_context: bool = True,
-        model: Optional[str] = None
+        model: Optional[str] = None,
+        rag_context: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """
         Потоковая генерация текста — обновление сообщения по мере получения токенов.
@@ -249,7 +276,8 @@ class GeminiService:
         from services.memory import get_relevant_facts
         facts_block = await get_relevant_facts(user_id) if user_id else ""
         facts_line = f"\n\n{facts_block}" if facts_block else ""
-        system_prompt = f"{persona_prompt}{facts_line}\n\nВажно: Отвечай на русском языке."
+        rag_block = f"\n\n{rag_context}" if rag_context else ""
+        system_prompt = f"{persona_prompt}{facts_line}{rag_block}\n\nВажно: Отвечай на русском языке."
         messages = [{"role": "system", "content": system_prompt}]
         for msg in context_messages[-10:]:
             messages.append({"role": msg['role'], "content": msg['content']})

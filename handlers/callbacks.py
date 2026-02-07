@@ -2,9 +2,11 @@
 Обработчик callback кнопок
 """
 import logging
+import uuid
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
+from telegram.error import BadRequest
 from database import db
 from services.gemini import gemini_service
 from services.image_gen import image_generator
@@ -13,6 +15,18 @@ from utils.i18n import t
 import config
 
 logger = logging.getLogger(__name__)
+
+
+async def safe_callback_answer(query, text=None, show_alert=False):
+    """Ответ на callback. Не падаем, если запрос устарел (Telegram даёт ~10–15 сек)."""
+    try:
+        await query.answer(text=text, show_alert=show_alert)
+    except BadRequest as e:
+        msg = str(e).lower()
+        if "too old" in msg or "invalid" in msg or "expired" in msg:
+            logger.debug("Callback answer skipped (query expired): %s", e)
+        else:
+            raise
 
 
 async def show_models_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, query):
@@ -158,11 +172,11 @@ async def show_models_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, q
             await query.message.reply_text(text, parse_mode=None, reply_markup=reply_markup)
     except Exception as e:
         logger.error(f"Ошибка в show_models_menu: {e}", exc_info=True)
-        try:
-            error_text = "❌ Произошла ошибка при загрузке меню моделей. Пожалуйста, попробуйте еще раз."
-            await query.answer(error_text, show_alert=True)
-        except:
-            pass
+        await safe_callback_answer(
+            query,
+            "❌ Произошла ошибка при загрузке меню моделей. Пожалуйста, попробуйте еще раз.",
+            show_alert=True,
+        )
 
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -173,14 +187,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error("button_callback вызван без callback_query")
         return
     
-    try:
-        await query.answer()
-    except Exception as e:
-        logger.warning(f"Ошибка при ответе на callback: {e}")
-    
     data = query.data
     user_id = query.from_user.id
-    
+
+    if await db.is_banned(user_id):
+        await safe_callback_answer(query, "⛔ Вы заблокированы.", show_alert=True)
+        return
+
     logger.debug(f"Обработка callback: {data} от пользователя {user_id}")
     
     # Вспомогательная функция для безопасного редактирования сообщений
@@ -197,7 +210,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Главное меню
     if data == "menu_main":
-        await query.answer("🏠 Возвращаемся в главное меню...")
+        await safe_callback_answer(query, "🏠 Возвращаемся в главное меню...")
         user_name = query.from_user.first_name or "друг"
         
         # Получаем статистику из базы данных
@@ -260,7 +273,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Меню чата
     elif data == "menu_chat":
-        await query.answer("💬 Чат с Gemini...")
+        await safe_callback_answer(query, "💬 Чат с Gemini...")
         text = """💬 ЧАТ С GEMINI
 
 Просто напишите вопрос или запрос, и я отвечу используя модели Gemini!
@@ -290,7 +303,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Меню создания изображений
     elif data == "menu_create_image":
-        await query.answer("🎨 Создание изображения...")
+        await safe_callback_answer(query, "🎨 Создание изображения...")
         text = """🎨 СОЗДАНИЕ ИЗОБРАЖЕНИЙ
 
 💡 Использование: /image [описание] или просто напишите "создай картинку [описание]"
@@ -319,31 +332,29 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Меню выбора моделей
     elif data == "menu_models":
-        await query.answer("🤖 Выбор модели...")
+        await safe_callback_answer(query, "🤖 Выбор модели...")
         await show_models_menu(update, context, query)
         return
     
     # Установка текстовой модели
     elif data.startswith("set_text_model_"):
         model_key = data.replace("set_text_model_", "")
+        await safe_callback_answer(query, f"✅ Текстовая модель установлена: {model_key if model_key != 'auto' else 'Автоматический выбор'}")
         await db.create_or_update_user(telegram_id=user_id, model=model_key)
-        model_display = model_key if model_key != 'auto' else 'Автоматический выбор'
-        await query.answer(f"✅ Текстовая модель установлена: {model_display}")
         await show_models_menu(update, context, query)
         return
     
     # Установка модели изображений
     elif data.startswith("set_image_model_"):
         model_key = data.replace("set_image_model_", "")
+        await safe_callback_answer(query, f"✅ Модель изображений установлена: {model_key if model_key != 'auto' else 'Автоматический выбор'}")
         await db.create_or_update_user(telegram_id=user_id, image_model=model_key)
-        model_display = model_key if model_key != 'auto' else 'Автоматический выбор'
-        await query.answer(f"✅ Модель изображений установлена: {model_display}")
         await show_models_menu(update, context, query)
         return
     
     # Меню персонажей
     elif data == "menu_personas" or data == "menu_persona":
-        await query.answer("👤 Выбор персонажа...")
+        await safe_callback_answer(query, "👤 Выбор персонажа...")
         user = await db.get_user(user_id)
         current_persona_key = user.persona if user else 'assistant'
         current_persona_name = config.PERSONAS.get(current_persona_key, {}).get('name', 'Помощник')
@@ -398,9 +409,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("set_persona_"):
         persona_key = data.replace("set_persona_", "")
         if persona_key in config.PERSONAS:
-            await db.create_or_update_user(telegram_id=user_id, persona=persona_key)
             persona_info = config.PERSONAS[persona_key]
-            await query.answer(f"✅ Установлен: {persona_info['name']}")
+            await safe_callback_answer(query, f"✅ Установлен: {persona_info['name']}")
+            await db.create_or_update_user(telegram_id=user_id, persona=persona_key)
             
             # Возвращаемся в меню персонажей
             user = await db.get_user(user_id)
@@ -455,7 +466,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Меню анализа фото
     elif data == "menu_photo_analysis":
-        await query.answer("📸 Анализ фото...")
+        await safe_callback_answer(query, "📸 Анализ фото...")
         text = """📸 АНАЛИЗ ФОТО
 
 📸 Анализ изображений через Gemini Vision:
@@ -477,7 +488,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Меню генерации кода
     elif data == "menu_code_gen":
-        await query.answer("💻 Генерация кода...")
+        await safe_callback_answer(query, "💻 Генерация кода...")
         text = """💻 ГЕНЕРАЦИЯ КОДА
 
 💡 Использование: /code [запрос]
@@ -498,7 +509,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Меню статистики
     elif data == "menu_stats":
-        await query.answer("📊 Загружаю статистику...")
+        await safe_callback_answer(query, "📊 Загружаю статистику...")
         stats = await db.get_stats(user_id)
         
         if stats:
@@ -532,7 +543,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Меню настроек
     elif data == "menu_settings_new":
-        await query.answer("⚙️ Открываю настройки...")
+        await safe_callback_answer(query, "⚙️ Открываю настройки...")
         user = await db.get_user(user_id)
         
         if user:
@@ -565,38 +576,59 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await safe_edit_message(text, reply_markup)
         return
     
-    # Перегенерировать ответ (Retry)
+    # Перегенерировать ответ (Retry) — в callback_data: retry_{user_id} или retry_{user_id}_{request_id}
     elif data.startswith("retry_"):
-        last_prompt = (context.user_data or {}).get("last_prompt")
-        if not last_prompt:
-            await query.answer("Нет последнего запроса для перегенерации", show_alert=True)
+        parts = data.split("_", 2)  # ["retry", user_id] или ["retry", user_id, request_id]
+        request_id = parts[2] if len(parts) >= 3 else None
+        ud = context.user_data or {}
+        prompt = ud.get("prompts", {}).get(request_id) if request_id else ud.get("last_prompt")
+        if not prompt:
+            await safe_callback_answer(query, "Нет запроса для перегенерации", show_alert=True)
             return
-        await query.answer("🔄 Перегенерирую...")
+        await safe_callback_answer(query, "🔄 Перегенерирую...")
         from handlers.chat import generate_and_reply_text
         from utils.text_tools import sanitize_markdown
+        from services.rag import get_rag_context
         try:
             await query.message.delete()
         except Exception:
             pass
         status_msg = await query.message.reply_text(t("thinking"))
+        rag_context = await get_rag_context(user_id, prompt)
         try:
             response = await generate_and_reply_text(
                 chat=query.message.chat,
                 user_id=user_id,
-                prompt=last_prompt,
+                prompt=prompt,
                 context=context,
+                rag_context=rag_context,
             )
             await status_msg.delete()
+            # Новый request_id для этого ответа — кнопка «Перегенерировать» под ним снова перезапустит тот же промпт
+            new_req_id = uuid.uuid4().hex[:8]
+            if "prompts" not in context.user_data:
+                context.user_data["prompts"] = {}
+            context.user_data["prompts"][new_req_id] = prompt
+            prompts_dict = context.user_data["prompts"]
+            if len(prompts_dict) > 20:
+                for k in list(prompts_dict.keys())[:-20]:
+                    del prompts_dict[k]
             keyboard = [
                 [
                     InlineKeyboardButton(t("btn_favorite"), callback_data=f"fav_{user_id}"),
-                    InlineKeyboardButton(t("btn_regenerate"), callback_data=f"retry_{user_id}"),
+                    InlineKeyboardButton(t("btn_regenerate"), callback_data=f"retry_{user_id}_{new_req_id}"),
                 ],
                 [InlineKeyboardButton(t("btn_rephrase"), callback_data=f"rephrase_{user_id}")],
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             safe = sanitize_markdown(response)
-            await query.message.reply_text(safe, parse_mode="Markdown", reply_markup=reply_markup)
+            try:
+                await query.message.reply_text(safe, parse_mode="Markdown", reply_markup=reply_markup)
+            except BadRequest as e:
+                if "parse" in str(e).lower() or "entities" in str(e).lower():
+                    await query.message.reply_text(response, parse_mode=None, reply_markup=reply_markup)
+                else:
+                    raise
         except Exception as e:
             logger.error("Retry error: %s", e)
             await status_msg.edit_text(t("error_generic") + f": {str(e)[:200]}")
@@ -612,7 +644,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             content_type='image' if query.message.photo else 'text'
         )
         
-        await query.answer(t("favorite_added"))
+        await safe_callback_answer(query, t("favorite_added"))
         try:
             await query.edit_message_reply_markup(reply_markup=None)
         except:
@@ -620,7 +652,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Переанализ фото
     elif data.startswith("reanalyze_"):
-        await query.answer("🔄 Переанализирую фото...")
+        await safe_callback_answer(query, "🔄 Переанализирую фото...")
         if query.message.photo:
             try:
                 # Создаем временный Update объект для анализа
@@ -634,7 +666,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await handle_photo(temp_update, context)
             except Exception as e:
                 logger.error(f"Ошибка переанализа фото: {e}")
-                await query.answer(f"❌ Ошибка переанализа: {str(e)[:100]}", show_alert=True)
+                await safe_callback_answer(query, f"❌ Ошибка переанализа: {str(e)[:100]}", show_alert=True)
     
     # Остальные обработчики (regenerate, rephrase и т.д.) можно добавить позже
     else:

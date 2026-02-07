@@ -21,6 +21,7 @@ class User(Base):
     model = Column(String(100), default='auto')
     image_model = Column(String(100), default='auto')
     age = Column(Integer, nullable=True)  # пример: добавлено через миграцию 002
+    is_banned = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

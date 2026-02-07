@@ -1,24 +1,17 @@
-FROM python:3.12-slim
+# Используем легкий образ Python
+FROM python:3.11-slim
 
+# Рабочая директория
 WORKDIR /app
 
-# Системные зависимости
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
-
-# Зависимости Python
+# Копируем зависимости и устанавливаем их
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Код приложения
+# Копируем весь код
 COPY . .
 
-# Переменные из .env передаются через docker-compose
 ENV PYTHONUNBUFFERED=1
 
-# Entrypoint: миграции + запуск бота
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
-ENTRYPOINT ["/docker-entrypoint.sh"]
+# Запускаем бота
 CMD ["python", "main.py"]

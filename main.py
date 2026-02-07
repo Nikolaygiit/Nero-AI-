@@ -1,7 +1,7 @@
 """
 Главный файл запуска бота - точка входа
 """
-import logging
+import structlog
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -29,57 +29,57 @@ from handlers.commands import (
 )
 from handlers.admin import broadcast_command, users_command, logs_command
 from handlers.payments import subscribe_command, pre_checkout_handler, successful_payment_handler
+from handlers.documents import handle_document, rag_docs_command, rag_clear_command
 from handlers.conversation import get_wizard_conversation_handler
 from utils.logging_config import setup_logging
 from utils.error_middleware import global_error_handler
 
-# Логирование с ротацией файлов (5 MB, 3 резервных копии)
+# Логирование с ротацией файлов (5 MB, 3 резервных копии) через structlog
 setup_logging()
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
+
+# Observability: Prometheus metrics (если prometheus_client установлен)
+try:
+    from utils.metrics import start_metrics_server, PROMETHEUS_AVAILABLE
+    if PROMETHEUS_AVAILABLE:
+        _mp = getattr(config.settings, "METRICS_PORT", 9090)
+        start_metrics_server(_mp)
+        logger.info("metrics_server_started", port=_mp)
+except Exception as e:
+    logger.debug("metrics_disabled", error=str(e))
 
 
 async def post_init(_application):
     """Вызывается после инициализации приложения (перед polling)"""
     await db.init()
-    logger.info("База данных инициализирована")
+    logger.info("database_initialized")
 
 
 async def post_shutdown(_application):
     """Вызывается после остановки приложения"""
     await db.close()
-    logger.info("Соединение с базой данных закрыто")
+    logger.info("database_closed")
 
 
 def main():
     """Основная функция запуска бота"""
-    logger.info("Инициализация бота...")
+    logger.info("bot_initializing")
     # Конфигурация валидирована при импорте (pydantic-settings) — ключи обязательны
 
-    # Создание приложения (post_init/post_shutdown для работы с БД)
-    # Уменьшенные таймауты для быстрого отклика, увеличен pool для параллельных запросов
-    try:
-        request = HTTPXRequest(
-            connect_timeout=10.0,
-            read_timeout=25.0,
-            write_timeout=15.0
-        )
-        
-        application = Application.builder()\
-            .token(config.TELEGRAM_BOT_TOKEN)\
-            .request(request)\
-            .connection_pool_size(8)\
-            .get_updates_connection_pool_size(2)\
-            .pool_timeout(30.0)\
-            .post_init(post_init)\
-            .post_shutdown(post_shutdown)\
-            .build()
-    except Exception as e:
-        logger.warning(f"Не удалось настроить HTTPX ({e}), используем стандартные настройки")
-        application = Application.builder()\
-            .token(config.TELEGRAM_BOT_TOKEN)\
-            .post_init(post_init)\
-            .post_shutdown(post_shutdown)\
-            .build()
+    # Создание приложения: таймауты в HTTPXRequest, pool — только без custom request
+    request = HTTPXRequest(
+        connect_timeout=10.0,
+        read_timeout=25.0,
+        write_timeout=15.0,
+    )
+    application = (
+        Application.builder()
+        .token(config.TELEGRAM_BOT_TOKEN)
+        .request(request)
+        .post_init(post_init)
+        .post_shutdown(post_shutdown)
+        .build()
+    )
     
     # Регистрация обработчиков команд
     application.add_handler(CommandHandler("start", start_command))
@@ -101,10 +101,13 @@ def main():
     application.add_handler(CommandHandler("users", users_command))
     application.add_handler(CommandHandler("logs", logs_command))
     application.add_handler(CommandHandler("subscribe", subscribe_command))
+    application.add_handler(CommandHandler("docs", rag_docs_command))
+    application.add_handler(CommandHandler("docs_clear", rag_clear_command))
     application.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
     application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
 
     # Регистрация обработчиков сообщений
+    application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     application.add_handler(MessageHandler(filters.VOICE, handle_voice))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
@@ -117,17 +120,31 @@ def main():
     # Централизованная обработка ошибок: лог в файл + пользователю "Что-то пошло не так" + админу трейсбек
     application.add_error_handler(global_error_handler)
     
-    # Запуск бота (run_polling управляет event loop самостоятельно)
-    logger.info("Бот запущен...")
-    logger.info("Найдите вашего бота в Telegram и отправьте /start")
-    
-    # timeout=5 — быстрее получать новые сообщения (long polling ждёт до 5 сек вместо 10)
-    application.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True,
-        timeout=5,
-        poll_interval=0
-    )
+    # Запуск: webhooks (high load) или polling (разработка)
+    use_webhooks = getattr(config.settings, "USE_WEBHOOKS", False)
+    webhook_url = getattr(config.settings, "WEBHOOK_URL", "").strip()
+
+    if use_webhooks and webhook_url:
+        port = getattr(config.settings, "WEBHOOK_PORT", 8443)
+        base = webhook_url.rstrip("/")
+        full_webhook = f"{base}/webhook" if not base.endswith("/webhook") else base
+        logger.info("bot_started_webhook", webhook_url=full_webhook, port=port)
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=port,
+            url_path="webhook",
+            webhook_url=full_webhook,
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,
+        )
+    else:
+        logger.info("bot_started", message="Бот запущен (polling), ожидает сообщения")
+        application.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,
+            timeout=5,
+            poll_interval=0
+        )
 
 
 if __name__ == '__main__':

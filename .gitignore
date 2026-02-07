@@ -24,8 +24,12 @@ dist/
 .DS_Store
 Thumbs.db
 
+# SSL certificates (deploy webhooks)
+deploy/certs/
+
 # Bot data and logs
 bot_data.json
 bot.log
 bot_backup.py
 bot_database.db
+data/
