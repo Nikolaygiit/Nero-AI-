@@ -12,7 +12,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 
 msgid "greeting"
-msgstr "✨ Привет, {name}!"
+msgstr "🌟 Добро пожаловать, {name}! Рад познакомиться!"
 
 msgid "error_generic"
 msgstr "❌ Произошла ошибка при обработке запроса"
