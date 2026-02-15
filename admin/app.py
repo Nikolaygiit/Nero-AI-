@@ -4,11 +4,10 @@
 """
 import os
 import sqlite3
-from datetime import datetime, timedelta
 from pathlib import Path
 
-import streamlit as st
 import pandas as pd
+import streamlit as st
 
 DB_PATH = Path(__file__).parent.parent / "bot_database.db"
 PAGE_TITLE = "Nero AI — Админ-панель"
@@ -142,7 +141,7 @@ def load_users(limit: int = 200) -> pd.DataFrame:
             conn,
             params=(limit,),
         )
-    except Exception as e:
+    except Exception:
         try:
             df = pd.read_sql_query(
                 """

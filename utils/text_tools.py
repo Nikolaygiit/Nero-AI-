@@ -1,7 +1,6 @@
 """
 Утилиты для работы с текстом и разметкой Telegram
 """
-import re
 
 
 def sanitize_markdown(text: str) -> str:

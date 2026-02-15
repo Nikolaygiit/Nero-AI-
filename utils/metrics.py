@@ -8,11 +8,11 @@ from typing import AsyncGenerator
 
 try:
     from prometheus_client import (
+        REGISTRY,
         Counter,
         Histogram,
-        start_http_server,
-        REGISTRY,
         generate_latest,
+        start_http_server,
     )
     PROMETHEUS_AVAILABLE = True
 except ImportError:
@@ -47,11 +47,13 @@ else:
     ERRORS_TOTAL = None
 
 
-def _parse_model_key(model_key: str) -> tuple:
+def _parse_model_key(model_key: str | None) -> tuple:
     """model_key = 'artemox:gemini-2.0-flash' -> ('artemox', 'gemini-2.0-flash')"""
+    if not model_key:
+        return ("unknown", "unknown")
     if ":" in model_key:
         return tuple(model_key.split(":", 1))
-    return ("unknown", model_key or "unknown")
+    return ("unknown", model_key)
 
 
 def record_request(model_key: str, status: str = "success", tokens: int = 0) -> None:
