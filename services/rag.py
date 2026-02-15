@@ -2,16 +2,17 @@
 RAG (Retrieval-Augmented Generation): PDF → чанки → эмбеддинги → ChromaDB.
 При вопросе пользователя ищем похожие фрагменты и подставляем в контекст LLM.
 """
+
 import asyncio
 import hashlib
 import logging
 import re
+from io import BytesIO
 from pathlib import Path
 from typing import List, Optional
 
 import httpx
 from pypdf import PdfReader
-from io import BytesIO
 
 import config
 
@@ -197,7 +198,7 @@ async def get_rag_context(user_id: int, query: str, top_k: int = RAG_TOP_K) -> O
     # ChromaDB по умолчанию L2: меньше = ближе. Нормализуем в условную «релевантность»
     chosen = []
     for i, doc in enumerate(docs):
-        d = distances[i] if i < len(distances) else 0
+        distances[i] if i < len(distances) else 0
         # Простой порог: если расстояние очень большое, не брать (зависит от метрики)
         chosen.append(doc)
     if not chosen:
@@ -226,7 +227,7 @@ async def list_rag_documents(user_id: int) -> List[str]:
     def _get():
         r = collection.get(where={"user_id": str(user_id)}, include=["metadatas"])
         names = set()
-        for m in (r.get("metadatas") or []):
+        for m in r.get("metadatas") or []:
             if m and isinstance(m, dict):
                 n = m.get("doc_name")
                 if n:
