@@ -26,6 +26,7 @@ from utils.analytics import track
 from utils.i18n import t
 from services.memory import extract_and_save_facts
 from services.rag import get_rag_context
+from handlers.chat_utils import make_regenerate_keyboard, split_long_message
 import config
 
 logger = structlog.get_logger(__name__)
@@ -234,48 +235,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
 
-        def make_regenerate_keyboard(uid: int, req_id: str):
-            return InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton(t("btn_favorite"), callback_data=f"fav_{uid}"),
-                    InlineKeyboardButton(t("btn_regenerate"), callback_data=f"retry_{uid}_{req_id}"),
-                ],
-                [InlineKeyboardButton(t("btn_rephrase"), callback_data=f"rephrase_{uid}")],
-            ])
-
         # Разбиваем длинные сообщения на части (лимит Telegram - 4096 символов)
-        if len(response) > 4096:
-            parts = []
-            current_part = ""
-            code_blocks = re.split(r'(```[\s\S]*?```)', response)
-            for block in code_blocks:
-                if len(current_part) + len(block) > 4000:
-                    if current_part:
-                        parts.append(current_part)
-                    current_part = block
-                else:
-                    current_part += block
-            if current_part:
-                parts.append(current_part)
+        parts = split_long_message(response, max_length=4000)
 
-            for i, part in enumerate(parts):
-                reply_markup = make_regenerate_keyboard(user_id, request_id) if i == len(parts) - 1 else None
-                safe_part = sanitize_markdown(part)
-                try:
-                    await update.message.reply_text(safe_part, parse_mode='Markdown', reply_markup=reply_markup)
-                except BadRequest as e:
-                    if "parse" in str(e).lower() or "entities" in str(e).lower():
-                        await update.message.reply_text(part, parse_mode=None, reply_markup=reply_markup)
-                    else:
-                        raise
-        else:
-            reply_markup = make_regenerate_keyboard(user_id, request_id)
-            safe_response = sanitize_markdown(response)
+        for i, part in enumerate(parts):
+            # Клавиатуру добавляем только к последней части
+            is_last = (i == len(parts) - 1)
+            reply_markup = make_regenerate_keyboard(user_id, request_id) if is_last else None
+
+            safe_part = sanitize_markdown(part)
             try:
-                await update.message.reply_text(safe_response, parse_mode='Markdown', reply_markup=reply_markup)
+                await update.message.reply_text(safe_part, parse_mode='Markdown', reply_markup=reply_markup)
             except BadRequest as e:
+                # Если markdown сломался (например, из-за разбиения посередине жирного текста), шлём без него
                 if "parse" in str(e).lower() or "entities" in str(e).lower():
-                    await update.message.reply_text(response, parse_mode=None, reply_markup=reply_markup)
+                    await update.message.reply_text(part, parse_mode=None, reply_markup=reply_markup)
                 else:
                     raise
             
