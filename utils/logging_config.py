@@ -2,6 +2,7 @@
 Централизованная настройка логирования через structlog
 Структурированные логи в формате JSON для анализа и построения графиков
 """
+
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
@@ -72,19 +73,27 @@ def setup_logging(level: int = logging.INFO) -> None:
     # Для консоли используем форматтер, который преобразует JSON в читаемый вид
     class ReadableFormatter(logging.Formatter):
         """Форматтер для читаемого вывода в консоль из JSON"""
+
         def format(self, record):
             msg = record.getMessage()
             # Если это JSON строка, форматируем читаемо
             if msg.startswith("{") and msg.endswith("}"):
                 try:
                     import json
+
                     data = json.loads(msg)
                     parts = []
                     if "timestamp" in data:
                         ts = data["timestamp"].replace("T", " ").replace("Z", "")[:19]
                         parts.append(f"[{ts}]")
                     if "level" in data:
-                        level_map = {"INFO": "INFO", "DEBUG": "DEBUG", "WARNING": "WARN", "ERROR": "ERROR", "CRITICAL": "CRIT"}
+                        level_map = {
+                            "INFO": "INFO",
+                            "DEBUG": "DEBUG",
+                            "WARNING": "WARN",
+                            "ERROR": "ERROR",
+                            "CRITICAL": "CRIT",
+                        }
                         parts.append(f"{level_map.get(data['level'], data['level'])}")
                     if "logger" in data:
                         parts.append(f"{data['logger']}")
