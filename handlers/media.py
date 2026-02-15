@@ -1,18 +1,18 @@
 """
 Обработчики медиа (фото, голос) — Vision + Whisper
 """
-import logging
 import base64
-from utils.text_tools import sanitize_markdown
-from utils.analytics import track
-from io import BytesIO
+import logging
+
 from telegram import Update
 from telegram.ext import ContextTypes
-from database import db
-from services.gemini import gemini_service
-from services.speech import speech_to_text
+
 from middlewares.rate_limit import rate_limit_middleware
 from middlewares.usage_limit import check_can_make_request
+from services.gemini import gemini_service
+from services.speech import speech_to_text
+from utils.analytics import track
+from utils.text_tools import sanitize_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка загруженных фотографий"""
     user_id = update.effective_user.id
-    
+
     if not await rate_limit_middleware.check_rate_limit(user_id):
         await update.message.reply_text(
             f"⏳ Слишком много запросов. Подождите {rate_limit_middleware.time_window} сек.",
@@ -34,43 +34,43 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     photo = update.message.photo[-1]
     file = await context.bot.get_file(photo.file_id)
-    
+
     caption = update.message.caption or "Опиши это изображение подробно на русском языке"
-    
+
     # Проверяем, хочет ли пользователь генерацию изображения на основе фото
     generation_keywords = ['создай', 'сгенерируй', 'нарисуй', 'сделай', 'портрет', 'аватар', 'измени', 'замени']
     wants_generation = any(keyword in caption.lower() for keyword in generation_keywords)
-    
+
     if wants_generation:
         # TODO: Реализовать генерацию изображения на основе фото
         await update.message.reply_text("⚠️ Генерация изображений на основе фото пока не реализована")
         return
-    
+
     # Обычный анализ изображения
     analysis_msg = await update.message.reply_text("📸 Анализирую изображение...")
-    
+
     try:
         # Скачиваем изображение
         photo_bytes = await file.download_as_bytearray()
-        
+
         # Конвертируем в base64
         image_base64 = base64.b64encode(photo_bytes).decode('utf-8')
 
         # Сохраняем в контексте для мультимодального диалога (вопросы о картинке в чате)
         if context.user_data is not None:
             context.user_data['last_image_base64'] = image_base64
-        
+
         # Анализируем через Gemini Vision
         analysis = await gemini_service.analyze_image(
             image_base64=image_base64,
             prompt=caption,
             user_id=user_id
         )
-        
+
         track("analyzed_image", str(user_id))
         safe_analysis = sanitize_markdown(analysis)
         await analysis_msg.edit_text(f"📸 **Анализ изображения:**\n\n{safe_analysis}", parse_mode='Markdown')
-        
+
     except Exception as e:
         logger.error(f"Ошибка анализа изображения: {e}")
         await analysis_msg.edit_text(f"❌ Ошибка анализа изображения: {str(e)[:200]}")

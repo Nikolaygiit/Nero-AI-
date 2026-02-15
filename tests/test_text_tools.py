@@ -1,9 +1,10 @@
 """
 Тесты для модуля utils.text_tools
 """
-import unittest
 import sys
+import unittest
 from unittest.mock import MagicMock, patch
+
 
 class TestTextTools(unittest.TestCase):
     @classmethod
