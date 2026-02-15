@@ -2,6 +2,7 @@
 Обработка загруженных документов (PDF) для RAG.
 Пользователь отправляет PDF — бот извлекает текст, чанкует, строит эмбеддинги и сохраняет в ChromaDB.
 """
+
 import logging
 
 from telegram import Update
@@ -39,12 +40,14 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if doc.file_size and doc.file_size > MAX_PDF_BYTES:
         await update.message.reply_text(
-            f"⚠️ Файл слишком большой (макс. {MAX_PDF_BYTES // (1024*1024)} МБ). Отправьте меньший PDF."
+            f"⚠️ Файл слишком большой (макс. {MAX_PDF_BYTES // (1024 * 1024)} МБ). Отправьте меньший PDF."
         )
         return
 
     if not await rate_limit_middleware.check_rate_limit(user_id):
-        await update.message.reply_text("⏳ Слишком много запросов. Подождите минуту.", parse_mode=None)
+        await update.message.reply_text(
+            "⏳ Слишком много запросов. Подождите минуту.", parse_mode=None
+        )
         return
     can_proceed, limit_msg = await check_can_make_request(user_id)
     if not can_proceed:

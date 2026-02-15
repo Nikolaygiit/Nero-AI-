@@ -1,6 +1,7 @@
 """
 Telegram Stars — оплата и подписка
 """
+
 import logging
 
 from telegram import LabeledPrice, Update
