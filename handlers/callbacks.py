@@ -1,18 +1,20 @@
 """
 Обработчик callback кнопок
 """
+
 import logging
 import uuid
 from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import BadRequest
-from database import db
-from services.gemini import gemini_service
-from services.image_gen import image_generator
-from handlers.media import handle_photo
-from utils.i18n import t
+from telegram.ext import ContextTypes
+
 import config
+from database import db
+from handlers.media import handle_photo
+from services.gemini import gemini_service
+from utils.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -33,133 +35,237 @@ async def show_models_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, q
     """Вспомогательная функция для отображения меню моделей"""
     try:
         user_id = query.from_user.id
-        
+
         # Получаем пользователя и настройки
         user = await db.get_user(user_id)
         if not user:
             await db.create_or_update_user(telegram_id=user_id)
             user = await db.get_user(user_id)
-        
-        current_text_model = user.model if user else 'auto'
-        current_image_model = user.image_model if user else 'auto'
-        
+
+        current_text_model = user.model if user else "auto"
+        current_image_model = user.image_model if user else "auto"
+
         # Получаем доступные модели
         available_models = await gemini_service.list_available_models()
-        
+
         # Категоризируем модели
-        text_models = {'pro': [], 'flash': []}
-        image_models = {'premium': [], 'high': [], 'medium': []}
-        
+        text_models = {"pro": [], "flash": []}
+        image_models = {"premium": [], "high": [], "medium": []}
+
         for model in available_models:
             model_lower = model.lower()
-            if 'image' in model_lower or 'imagen' in model_lower:
-                if '3-pro-image' in model_lower or '4.0-ultra' in model_lower:
-                    image_models['premium'].append(model)
-                elif '4.0-generate' in model_lower and 'ultra' not in model_lower:
-                    image_models['high'].append(model)
-                elif '2.5-flash-image-preview' in model_lower:
-                    image_models['high'].append(model)
+            if "image" in model_lower or "imagen" in model_lower:
+                if "3-pro-image" in model_lower or "4.0-ultra" in model_lower:
+                    image_models["premium"].append(model)
+                elif "4.0-generate" in model_lower and "ultra" not in model_lower:
+                    image_models["high"].append(model)
+                elif "2.5-flash-image-preview" in model_lower:
+                    image_models["high"].append(model)
                 else:
-                    image_models['medium'].append(model)
-            elif 'pro' in model_lower and 'image' not in model_lower:
-                text_models['pro'].append(model)
-            elif 'flash' in model_lower and 'image' not in model_lower:
-                text_models['flash'].append(model)
-        
+                    image_models["medium"].append(model)
+            elif "pro" in model_lower and "image" not in model_lower:
+                text_models["pro"].append(model)
+            elif "flash" in model_lower and "image" not in model_lower:
+                text_models["flash"].append(model)
+
         text = f"""🤖 ВЫБОР МОДЕЛИ GEMINI
 
-✅ Текущая текстовая модель: {current_text_model if current_text_model != 'auto' else 'Автоматический выбор'}
-✅ Текущая модель изображений: {current_image_model if current_image_model != 'auto' else 'Автоматический выбор'}
+✅ Текущая текстовая модель: {current_text_model if current_text_model != "auto" else "Автоматический выбор"}
+✅ Текущая модель изображений: {current_image_model if current_image_model != "auto" else "Автоматический выбор"}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 💬 ТЕКСТОВЫЕ МОДЕЛИ GEMINI
 
 """
-        
+
         keyboard = []
-        
+
         # Добавляем кнопки для текстовых моделей
-        pro_models = text_models['pro'][:2]
-        flash_models = text_models['flash'][:2]
-        
+        pro_models = text_models["pro"][:2]
+        flash_models = text_models["flash"][:2]
+
         if pro_models:
             pro_buttons = []
             for model in pro_models:
-                model_short = model.replace('gemini-', '').replace('-preview', '').replace('-pro', ' Pro').title()
+                model_short = (
+                    model.replace("gemini-", "")
+                    .replace("-preview", "")
+                    .replace("-pro", " Pro")
+                    .title()
+                )
                 if current_text_model == model:
-                    pro_buttons.append(InlineKeyboardButton(f"✅ {model_short[:18]}", callback_data=f"set_text_model_{model}"))
+                    pro_buttons.append(
+                        InlineKeyboardButton(
+                            f"✅ {model_short[:18]}", callback_data=f"set_text_model_{model}"
+                        )
+                    )
                 else:
-                    pro_buttons.append(InlineKeyboardButton(f"🔥 {model_short[:18]}", callback_data=f"set_text_model_{model}"))
+                    pro_buttons.append(
+                        InlineKeyboardButton(
+                            f"🔥 {model_short[:18]}", callback_data=f"set_text_model_{model}"
+                        )
+                    )
             if pro_buttons:
                 keyboard.append(pro_buttons[:2] if len(pro_buttons) >= 2 else pro_buttons)
-        
+
         if flash_models:
             flash_buttons = []
             for model in flash_models:
-                model_short = model.replace('gemini-', '').replace('-preview', '').replace('-flash', ' Flash').title()
+                model_short = (
+                    model.replace("gemini-", "")
+                    .replace("-preview", "")
+                    .replace("-flash", " Flash")
+                    .title()
+                )
                 if current_text_model == model:
-                    flash_buttons.append(InlineKeyboardButton(f"✅ {model_short[:18]}", callback_data=f"set_text_model_{model}"))
+                    flash_buttons.append(
+                        InlineKeyboardButton(
+                            f"✅ {model_short[:18]}", callback_data=f"set_text_model_{model}"
+                        )
+                    )
                 else:
-                    flash_buttons.append(InlineKeyboardButton(f"⚡ {model_short[:18]}", callback_data=f"set_text_model_{model}"))
+                    flash_buttons.append(
+                        InlineKeyboardButton(
+                            f"⚡ {model_short[:18]}", callback_data=f"set_text_model_{model}"
+                        )
+                    )
             if flash_buttons:
                 keyboard.append(flash_buttons[:2] if len(flash_buttons) >= 2 else flash_buttons)
-        
+
         # Кнопка автоматического выбора для текста
-        if current_text_model == 'auto':
-            keyboard.append([InlineKeyboardButton("✅ Автоматический выбор (текст)", callback_data="set_text_model_auto")])
+        if current_text_model == "auto":
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        "✅ Автоматический выбор (текст)", callback_data="set_text_model_auto"
+                    )
+                ]
+            )
         else:
-            keyboard.append([InlineKeyboardButton("🔄 Автоматический выбор (текст)", callback_data="set_text_model_auto")])
-        
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        "🔄 Автоматический выбор (текст)", callback_data="set_text_model_auto"
+                    )
+                ]
+            )
+
         text += "\n🎨 МОДЕЛИ ДЛЯ ИЗОБРАЖЕНИЙ GEMINI\n\n"
-        
+
         # Добавляем кнопки для моделей изображений
-        premium_models = image_models['premium'][:2]
-        high_models = image_models['high'][:2]
-        medium_models = image_models['medium'][:2]
-        
+        premium_models = image_models["premium"][:2]
+        high_models = image_models["high"][:2]
+        medium_models = image_models["medium"][:2]
+
         if premium_models:
             premium_buttons = []
             for model in premium_models:
-                model_short = model.replace('gemini-', '').replace('-preview', '').replace('-image', ' Img').replace('-pro', ' Pro').replace('imagen-', '').replace('-ultra-generate-001', ' Ultra').replace('-generate-001', '').title()
+                model_short = (
+                    model.replace("gemini-", "")
+                    .replace("-preview", "")
+                    .replace("-image", " Img")
+                    .replace("-pro", " Pro")
+                    .replace("imagen-", "")
+                    .replace("-ultra-generate-001", " Ultra")
+                    .replace("-generate-001", "")
+                    .title()
+                )
                 if current_image_model == model:
-                    premium_buttons.append(InlineKeyboardButton(f"✅ {model_short[:18]}", callback_data=f"set_image_model_{model}"))
+                    premium_buttons.append(
+                        InlineKeyboardButton(
+                            f"✅ {model_short[:18]}", callback_data=f"set_image_model_{model}"
+                        )
+                    )
                 else:
-                    premium_buttons.append(InlineKeyboardButton(f"🔴 {model_short[:18]}", callback_data=f"set_image_model_{model}"))
+                    premium_buttons.append(
+                        InlineKeyboardButton(
+                            f"🔴 {model_short[:18]}", callback_data=f"set_image_model_{model}"
+                        )
+                    )
             if premium_buttons:
-                keyboard.append(premium_buttons[:2] if len(premium_buttons) >= 2 else premium_buttons)
-        
+                keyboard.append(
+                    premium_buttons[:2] if len(premium_buttons) >= 2 else premium_buttons
+                )
+
         if high_models:
             high_buttons = []
             for model in high_models:
-                model_short = model.replace('gemini-', '').replace('-preview', '').replace('-image', ' Img').replace('-flash', ' Flash').replace('imagen-', '').replace('-fast-generate-001', ' Fast').replace('-generate-001', '').title()
+                model_short = (
+                    model.replace("gemini-", "")
+                    .replace("-preview", "")
+                    .replace("-image", " Img")
+                    .replace("-flash", " Flash")
+                    .replace("imagen-", "")
+                    .replace("-fast-generate-001", " Fast")
+                    .replace("-generate-001", "")
+                    .title()
+                )
                 if current_image_model == model:
-                    high_buttons.append(InlineKeyboardButton(f"✅ {model_short[:18]}", callback_data=f"set_image_model_{model}"))
+                    high_buttons.append(
+                        InlineKeyboardButton(
+                            f"✅ {model_short[:18]}", callback_data=f"set_image_model_{model}"
+                        )
+                    )
                 else:
-                    high_buttons.append(InlineKeyboardButton(f"🟠 {model_short[:18]}", callback_data=f"set_image_model_{model}"))
+                    high_buttons.append(
+                        InlineKeyboardButton(
+                            f"🟠 {model_short[:18]}", callback_data=f"set_image_model_{model}"
+                        )
+                    )
             if high_buttons:
                 keyboard.append(high_buttons[:2] if len(high_buttons) >= 2 else high_buttons)
-        
+
         if medium_models:
             medium_buttons = []
             for model in medium_models:
-                model_short = model.replace('gemini-', '').replace('-image', ' Img').replace('-flash', ' Flash').replace('imagen-', '').replace('-fast-generate-001', ' Fast').replace('-generate-001', '').title()
+                model_short = (
+                    model.replace("gemini-", "")
+                    .replace("-image", " Img")
+                    .replace("-flash", " Flash")
+                    .replace("imagen-", "")
+                    .replace("-fast-generate-001", " Fast")
+                    .replace("-generate-001", "")
+                    .title()
+                )
                 if current_image_model == model:
-                    medium_buttons.append(InlineKeyboardButton(f"✅ {model_short[:18]}", callback_data=f"set_image_model_{model}"))
+                    medium_buttons.append(
+                        InlineKeyboardButton(
+                            f"✅ {model_short[:18]}", callback_data=f"set_image_model_{model}"
+                        )
+                    )
                 else:
-                    medium_buttons.append(InlineKeyboardButton(f"🟡 {model_short[:18]}", callback_data=f"set_image_model_{model}"))
+                    medium_buttons.append(
+                        InlineKeyboardButton(
+                            f"🟡 {model_short[:18]}", callback_data=f"set_image_model_{model}"
+                        )
+                    )
             if medium_buttons:
                 keyboard.append(medium_buttons[:2] if len(medium_buttons) >= 2 else medium_buttons)
-        
+
         # Кнопка автоматического выбора для изображений
-        if current_image_model == 'auto':
-            keyboard.append([InlineKeyboardButton("✅ Автоматический выбор (изображения)", callback_data="set_image_model_auto")])
+        if current_image_model == "auto":
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        "✅ Автоматический выбор (изображения)",
+                        callback_data="set_image_model_auto",
+                    )
+                ]
+            )
         else:
-            keyboard.append([InlineKeyboardButton("🔄 Автоматический выбор (изображения)", callback_data="set_image_model_auto")])
-        
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        "🔄 Автоматический выбор (изображения)",
+                        callback_data="set_image_model_auto",
+                    )
+                ]
+            )
+
         keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        
+
         # Безопасное редактирование сообщения
         try:
             message = query.message
@@ -182,11 +288,11 @@ async def show_models_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, q
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка нажатий на кнопки"""
     query = update.callback_query
-    
+
     if not query:
         logger.error("button_callback вызван без callback_query")
         return
-    
+
     data = query.data
     user_id = query.from_user.id
 
@@ -195,7 +301,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     logger.debug(f"Обработка callback: {data} от пользователя {user_id}")
-    
+
     # Вспомогательная функция для безопасного редактирования сообщений
     async def safe_edit_message(text, reply_markup=None):
         try:
@@ -207,21 +313,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.warning(f"Не удалось отредактировать сообщение, отправляем новое: {e}")
             await query.message.reply_text(text, parse_mode=None, reply_markup=reply_markup)
-    
+
     # Главное меню
     if data == "menu_main":
         await safe_callback_answer(query, "🏠 Возвращаемся в главное меню...")
         user_name = query.from_user.first_name or "друг"
-        
+
         # Получаем статистику из базы данных
         stats = await db.get_stats(user_id)
         requests_count = stats.requests_count if stats else 0
-        
+
         # Получаем количество моделей
         available_models = await gemini_service.list_available_models()
-        image_models = [m for m in available_models if 'image' in m.lower() or 'imagen' in m.lower()]
+        image_models = [
+            m for m in available_models if "image" in m.lower() or "imagen" in m.lower()
+        ]
         image_count = len(image_models) if image_models else 9
-        
+
         menu_text = f"""🌟 Добро пожаловать, {user_name}!
 
 Рад познакомиться! Я — твой умный помощник на базе Gemini AI от Google.
@@ -248,30 +356,30 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 ❓ Поддержка: @nik_solt
 """
-        
+
         keyboard = [
             [
                 InlineKeyboardButton("💬 Чат с Gemini", callback_data="menu_chat"),
-                InlineKeyboardButton("🎨 Создать изображение", callback_data="menu_create_image")
+                InlineKeyboardButton("🎨 Создать изображение", callback_data="menu_create_image"),
             ],
             [
                 InlineKeyboardButton("🤖 Выбрать модель", callback_data="menu_models"),
-                InlineKeyboardButton("👤 Персонажи", callback_data="menu_personas")
+                InlineKeyboardButton("👤 Персонажи", callback_data="menu_personas"),
             ],
             [
                 InlineKeyboardButton("📸 Анализ фото", callback_data="menu_photo_analysis"),
-                InlineKeyboardButton("💻 Генерация кода", callback_data="menu_code_gen")
+                InlineKeyboardButton("💻 Генерация кода", callback_data="menu_code_gen"),
             ],
             [
                 InlineKeyboardButton("📊 Статистика", callback_data="menu_stats"),
-                InlineKeyboardButton("⚙️ Настройки", callback_data="menu_settings_new")
-            ]
+                InlineKeyboardButton("⚙️ Настройки", callback_data="menu_settings_new"),
+            ],
         ]
-        
+
         reply_markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(menu_text, reply_markup)
         return
-    
+
     # Меню чата
     elif data == "menu_chat":
         await safe_callback_answer(query, "💬 Чат с Gemini...")
@@ -296,12 +404,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             [InlineKeyboardButton("👤 Выбрать персонажа", callback_data="menu_personas")],
             [InlineKeyboardButton("🤖 Выбрать модель", callback_data="menu_models")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="menu_main")]
+            [InlineKeyboardButton("⬅️ Назад", callback_data="menu_main")],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(text, reply_markup)
         return
-    
+
     # Меню создания изображений
     elif data == "menu_create_image":
         await safe_callback_answer(query, "🎨 Создание изображения...")
@@ -325,41 +433,47 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
         keyboard = [
             [InlineKeyboardButton("🤖 Выбрать модель", callback_data="menu_models")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="menu_main")]
+            [InlineKeyboardButton("⬅️ Назад", callback_data="menu_main")],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(text, reply_markup)
         return
-    
+
     # Меню выбора моделей
     elif data == "menu_models":
         await safe_callback_answer(query, "🤖 Выбор модели...")
         await show_models_menu(update, context, query)
         return
-    
+
     # Установка текстовой модели
     elif data.startswith("set_text_model_"):
         model_key = data.replace("set_text_model_", "")
-        await safe_callback_answer(query, f"✅ Текстовая модель установлена: {model_key if model_key != 'auto' else 'Автоматический выбор'}")
+        await safe_callback_answer(
+            query,
+            f"✅ Текстовая модель установлена: {model_key if model_key != 'auto' else 'Автоматический выбор'}",
+        )
         await db.create_or_update_user(telegram_id=user_id, model=model_key)
         await show_models_menu(update, context, query)
         return
-    
+
     # Установка модели изображений
     elif data.startswith("set_image_model_"):
         model_key = data.replace("set_image_model_", "")
-        await safe_callback_answer(query, f"✅ Модель изображений установлена: {model_key if model_key != 'auto' else 'Автоматический выбор'}")
+        await safe_callback_answer(
+            query,
+            f"✅ Модель изображений установлена: {model_key if model_key != 'auto' else 'Автоматический выбор'}",
+        )
         await db.create_or_update_user(telegram_id=user_id, image_model=model_key)
         await show_models_menu(update, context, query)
         return
-    
+
     # Меню персонажей
     elif data == "menu_personas" or data == "menu_persona":
         await safe_callback_answer(query, "👤 Выбор персонажа...")
         user = await db.get_user(user_id)
-        current_persona_key = user.persona if user else 'assistant'
-        current_persona_name = config.PERSONAS.get(current_persona_key, {}).get('name', 'Помощник')
-        
+        current_persona_key = user.persona if user else "assistant"
+        current_persona_name = config.PERSONAS.get(current_persona_key, {}).get("name", "Помощник")
+
         text = f"""👤 ВЫБОР ПЕРСОНАЖА
 
 Выберите стиль общения:
@@ -382,30 +496,30 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             [
                 InlineKeyboardButton("🎓 Учитель", callback_data="set_persona_teacher"),
-                InlineKeyboardButton("💻 Программист", callback_data="set_persona_programmer")
+                InlineKeyboardButton("💻 Программист", callback_data="set_persona_programmer"),
             ],
             [
                 InlineKeyboardButton("🤝 Помощник", callback_data="set_persona_assistant"),
-                InlineKeyboardButton("🎨 Креативщик", callback_data="set_persona_creative")
+                InlineKeyboardButton("🎨 Креативщик", callback_data="set_persona_creative"),
             ],
             [
                 InlineKeyboardButton("📊 Аналитик", callback_data="set_persona_analyst"),
-                InlineKeyboardButton("🌐 Переводчик", callback_data="set_persona_translator")
+                InlineKeyboardButton("🌐 Переводчик", callback_data="set_persona_translator"),
             ],
             [
                 InlineKeyboardButton("✍️ Писатель", callback_data="set_persona_writer"),
-                InlineKeyboardButton("🔬 Ученый", callback_data="set_persona_scientist")
+                InlineKeyboardButton("🔬 Ученый", callback_data="set_persona_scientist"),
             ],
             [
                 InlineKeyboardButton("💼 Бизнес", callback_data="set_persona_business"),
-                InlineKeyboardButton("🧠 Психолог", callback_data="set_persona_psychologist")
+                InlineKeyboardButton("🧠 Психолог", callback_data="set_persona_psychologist"),
             ],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="menu_main")]
+            [InlineKeyboardButton("⬅️ Назад", callback_data="menu_main")],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(text, reply_markup)
         return
-    
+
     # Установка персонажа
     elif data.startswith("set_persona_"):
         persona_key = data.replace("set_persona_", "")
@@ -413,12 +527,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             persona_info = config.PERSONAS[persona_key]
             await safe_callback_answer(query, f"✅ Установлен: {persona_info['name']}")
             await db.create_or_update_user(telegram_id=user_id, persona=persona_key)
-            
+
             # Возвращаемся в меню персонажей
             user = await db.get_user(user_id)
-            current_persona_key = user.persona if user else 'assistant'
-            current_persona_name = config.PERSONAS.get(current_persona_key, {}).get('name', 'Помощник')
-            
+            current_persona_key = user.persona if user else "assistant"
+            current_persona_name = config.PERSONAS.get(current_persona_key, {}).get(
+                "name", "Помощник"
+            )
+
             text = f"""👤 ВЫБОР ПЕРСОНАЖА
 
 Выберите стиль общения:
@@ -441,30 +557,30 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard = [
                 [
                     InlineKeyboardButton("🎓 Учитель", callback_data="set_persona_teacher"),
-                    InlineKeyboardButton("💻 Программист", callback_data="set_persona_programmer")
+                    InlineKeyboardButton("💻 Программист", callback_data="set_persona_programmer"),
                 ],
                 [
                     InlineKeyboardButton("🤝 Помощник", callback_data="set_persona_assistant"),
-                    InlineKeyboardButton("🎨 Креативщик", callback_data="set_persona_creative")
+                    InlineKeyboardButton("🎨 Креативщик", callback_data="set_persona_creative"),
                 ],
                 [
                     InlineKeyboardButton("📊 Аналитик", callback_data="set_persona_analyst"),
-                    InlineKeyboardButton("🌐 Переводчик", callback_data="set_persona_translator")
+                    InlineKeyboardButton("🌐 Переводчик", callback_data="set_persona_translator"),
                 ],
                 [
                     InlineKeyboardButton("✍️ Писатель", callback_data="set_persona_writer"),
-                    InlineKeyboardButton("🔬 Ученый", callback_data="set_persona_scientist")
+                    InlineKeyboardButton("🔬 Ученый", callback_data="set_persona_scientist"),
                 ],
                 [
                     InlineKeyboardButton("💼 Бизнес", callback_data="set_persona_business"),
-                    InlineKeyboardButton("🧠 Психолог", callback_data="set_persona_psychologist")
+                    InlineKeyboardButton("🧠 Психолог", callback_data="set_persona_psychologist"),
                 ],
-                [InlineKeyboardButton("⬅️ Назад", callback_data="menu_main")]
+                [InlineKeyboardButton("⬅️ Назад", callback_data="menu_main")],
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await safe_edit_message(text, reply_markup)
         return
-    
+
     # Меню анализа фото
     elif data == "menu_photo_analysis":
         await safe_callback_answer(query, "📸 Анализ фото...")
@@ -481,12 +597,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
         keyboard = [
             [InlineKeyboardButton("🎨 Создать изображение", callback_data="menu_create_image")],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="menu_main")]
+            [InlineKeyboardButton("⬅️ Назад", callback_data="menu_main")],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(text, reply_markup)
         return
-    
+
     # Меню генерации кода
     elif data == "menu_code_gen":
         await safe_callback_answer(query, "💻 Генерация кода...")
@@ -507,17 +623,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(text, reply_markup)
         return
-    
+
     # Меню статистики
     elif data == "menu_stats":
         await safe_callback_answer(query, "📊 Загружаю статистику...")
         stats = await db.get_stats(user_id)
-        
+
         if stats:
-            days_active = max((datetime.now() - stats.start_date).days, 1) if stats.start_date else 1
+            days_active = (
+                max((datetime.now() - stats.start_date).days, 1) if stats.start_date else 1
+            )
             avg_requests_per_day = stats.requests_count / days_active if days_active > 0 else 0
             avg_tokens_per_request = stats.tokens_used / max(stats.requests_count, 1)
-            
+
             text = f"""📊 ВАША СТАТИСТИКА
 
 📝 Запросов: {stats.requests_count}
@@ -536,24 +654,24 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 💡 Начните использовать бота для накопления статистики!
 """
-        
+
         keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="menu_main")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(text, reply_markup)
         return
-    
+
     # Меню настроек
     elif data == "menu_settings_new":
         await safe_callback_answer(query, "⚙️ Открываю настройки...")
         user = await db.get_user(user_id)
-        
+
         if user:
-            persona_name = config.PERSONAS.get(user.persona, {}).get('name', 'Помощник')
+            persona_name = config.PERSONAS.get(user.persona, {}).get("name", "Помощник")
             text = f"""⚙️ НАСТРОЙКИ БОТА
 
 🌐 Язык: {user.language}
-🤖 Текстовая модель: {user.model if user.model != 'auto' else 'Автоматический выбор'}
-🎨 Модель изображений: {user.image_model if user.image_model != 'auto' else 'Автоматический выбор'}
+🤖 Текстовая модель: {user.model if user.model != "auto" else "Автоматический выбор"}
+🎨 Модель изображений: {user.image_model if user.image_model != "auto" else "Автоматический выбор"}
 👤 Персонаж: {persona_name}
 
 💡 Использование:
@@ -565,18 +683,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 Используйте кнопки ниже для изменения настроек.
 """
-        
+
         keyboard = [
             [
                 InlineKeyboardButton("👤 Изменить персонажа", callback_data="menu_personas"),
-                InlineKeyboardButton("🤖 Выбрать модель", callback_data="menu_models")
+                InlineKeyboardButton("🤖 Выбрать модель", callback_data="menu_models"),
             ],
-            [InlineKeyboardButton("⬅️ Назад", callback_data="menu_main")]
+            [InlineKeyboardButton("⬅️ Назад", callback_data="menu_main")],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(text, reply_markup)
         return
-    
+
     # Перегенерировать ответ (Retry) — в callback_data: retry_{user_id} или retry_{user_id}_{request_id}
     elif data.startswith("retry_"):
         parts = data.split("_", 2)  # ["retry", user_id] или ["retry", user_id, request_id]
@@ -588,8 +706,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         await safe_callback_answer(query, "🔄 Перегенерирую...")
         from handlers.chat import generate_and_reply_text
-        from utils.text_tools import sanitize_markdown
         from services.rag import get_rag_context
+        from utils.text_tools import sanitize_markdown
+
         try:
             await query.message.delete()
         except Exception:
@@ -617,17 +736,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard = [
                 [
                     InlineKeyboardButton(t("btn_favorite"), callback_data=f"fav_{user_id}"),
-                    InlineKeyboardButton(t("btn_regenerate"), callback_data=f"retry_{user_id}_{new_req_id}"),
+                    InlineKeyboardButton(
+                        t("btn_regenerate"), callback_data=f"retry_{user_id}_{new_req_id}"
+                    ),
                 ],
                 [InlineKeyboardButton(t("btn_rephrase"), callback_data=f"rephrase_{user_id}")],
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             safe = sanitize_markdown(response)
             try:
-                await query.message.reply_text(safe, parse_mode="Markdown", reply_markup=reply_markup)
+                await query.message.reply_text(
+                    safe, parse_mode="Markdown", reply_markup=reply_markup
+                )
             except BadRequest as e:
                 if "parse" in str(e).lower() or "entities" in str(e).lower():
-                    await query.message.reply_text(response, parse_mode=None, reply_markup=reply_markup)
+                    await query.message.reply_text(
+                        response, parse_mode=None, reply_markup=reply_markup
+                    )
                 else:
                     raise
         except Exception as e:
@@ -638,19 +763,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Обработка избранного
     elif data.startswith("fav_"):
         original_text = query.message.text or query.message.caption or ""
-        
+
         await db.add_favorite(
             user_id=user_id,
             content=original_text,
-            content_type='image' if query.message.photo else 'text'
+            content_type="image" if query.message.photo else "text",
         )
-        
+
         await safe_callback_answer(query, t("favorite_added"))
         try:
             await query.edit_message_reply_markup(reply_markup=None)
         except Exception:
             pass
-    
+
     # Переанализ фото
     elif data.startswith("reanalyze_"):
         await safe_callback_answer(query, "🔄 Переанализирую фото...")
@@ -662,13 +787,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         self.message = message
                         self.effective_user = message.from_user
                         self.effective_chat = message.chat
-                
+
                 temp_update = TempUpdate(query.message)
                 await handle_photo(temp_update, context)
             except Exception as e:
                 logger.error(f"Ошибка переанализа фото: {e}")
-                await safe_callback_answer(query, f"❌ Ошибка переанализа: {str(e)[:100]}", show_alert=True)
-    
+                await safe_callback_answer(
+                    query, f"❌ Ошибка переанализа: {str(e)[:100]}", show_alert=True
+                )
+
     # Остальные обработчики (regenerate, rephrase и т.д.) можно добавить позже
     else:
         logger.warning(f"Неизвестный callback: {data}")

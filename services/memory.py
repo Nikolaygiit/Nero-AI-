@@ -10,6 +10,7 @@ from typing import Dict
 
 import structlog
 
+import config
 from database import db
 from services.gemini import gemini_service
 
@@ -51,14 +52,15 @@ async def extract_facts_with_gemini(user_message: str) -> Dict[str, str]:
 
     try:
         # Используем лёгкую модель (Gemini Flash) для быстрого извлечения фактов
-        fact_model = (
-            getattr(config, "FACT_EXTRACTION_MODEL", "gemini-2.0-flash") or "gemini-2.0-flash"
-        )
+        model_name = "gemini-2.0-flash"
+        if hasattr(config, "FACT_EXTRACTION_MODEL"):
+            model_name = getattr(config, "FACT_EXTRACTION_MODEL") or model_name
+
         response = await gemini_service.generate_content(
             prompt=prompt,
+            model=model_name,
             user_id=None,  # без контекста пользователя
             use_context=False,
-            model=fact_model,
         )
 
         # Очищаем ответ от markdown блоков кода, если есть

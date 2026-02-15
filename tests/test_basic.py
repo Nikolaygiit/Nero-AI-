@@ -1,19 +1,19 @@
 import sys
 import unittest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Mock heavy external dependencies
-sys.modules['sqlalchemy'] = MagicMock()
-sys.modules['sqlalchemy.ext'] = MagicMock()
-sys.modules['sqlalchemy.ext.asyncio'] = MagicMock()
-sys.modules['sqlalchemy.ext.declarative'] = MagicMock()
-sys.modules['sqlalchemy.orm'] = MagicMock()
-sys.modules['aiosqlite'] = MagicMock()
-sys.modules['httpx'] = MagicMock()
-sys.modules['redis'] = MagicMock()
-sys.modules['redis.asyncio'] = MagicMock()
-sys.modules['taskiq'] = MagicMock()
-sys.modules['taskiq_redis'] = MagicMock()
+sys.modules["sqlalchemy"] = MagicMock()
+sys.modules["sqlalchemy.ext"] = MagicMock()
+sys.modules["sqlalchemy.ext.asyncio"] = MagicMock()
+sys.modules["sqlalchemy.ext.declarative"] = MagicMock()
+sys.modules["sqlalchemy.orm"] = MagicMock()
+sys.modules["aiosqlite"] = MagicMock()
+sys.modules["httpx"] = MagicMock()
+sys.modules["redis"] = MagicMock()
+sys.modules["redis.asyncio"] = MagicMock()
+sys.modules["taskiq"] = MagicMock()
+sys.modules["taskiq_redis"] = MagicMock()
 
 # Create the mock DB object with AsyncMock methods
 mock_db_instance = MagicMock()
@@ -30,19 +30,21 @@ mock_db_instance.get_stats = AsyncMock()
 mock_database_pkg = MagicMock()
 mock_database_pkg.db = mock_db_instance
 
+
 class TestBasic(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.patcher = patch.dict(sys.modules, {'database': mock_database_pkg})
+        self.patcher = patch.dict(sys.modules, {"database": mock_database_pkg})
         self.patcher.start()
         # Re-import database.db to ensure it uses our mocked package if needed
         # But actually we just use the mocked instance directly via `mock_database_pkg.db` or `from database import db`
-    
+
     async def asyncTearDown(self):
         self.patcher.stop()
 
     async def test_database_init(self):
         """Тест инициализации базы данных (mocked)"""
         from database import db
+
         await db.init()
         db.init.assert_called()
         await db.close()
@@ -61,11 +63,9 @@ class TestBasic(unittest.IsolatedAsyncioTestCase):
         db.get_user.return_value = mock_user
 
         user = await db.create_or_update_user(
-            telegram_id=12345,
-            username="test_user",
-            first_name="Test"
+            telegram_id=12345, username="test_user", first_name="Test"
         )
-        
+
         self.assertIsNotNone(user)
         self.assertEqual(user.telegram_id, 12345)
         self.assertEqual(user.username, "test_user")
@@ -78,14 +78,15 @@ class TestBasic(unittest.IsolatedAsyncioTestCase):
         mock_msg1 = MagicMock(role="user", content="Привет!")
         mock_msg2 = MagicMock(role="assistant", content="Привет! Как дела?")
         db.get_user_messages.return_value = [mock_msg1, mock_msg2]
-        
+
         # Добавляем сообщение
         await db.add_message(12345, "user", "Привет!")
-        
+
         # Получаем сообщения
         messages = await db.get_user_messages(12345, limit=10)
         self.assertEqual(len(messages), 2)
         self.assertEqual(messages[0].role, "user")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

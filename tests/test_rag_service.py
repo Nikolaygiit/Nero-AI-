@@ -1,43 +1,44 @@
 # ruff: noqa: E402
-import sys
 import os
+import sys
 import unittest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Add current dir to path
 sys.path.append(os.getcwd())
 
 # Mock dependencies before importing services.rag
-sys.modules['pypdf'] = MagicMock()
-sys.modules['chromadb'] = MagicMock()
-sys.modules['chromadb.config'] = MagicMock()
-sys.modules['httpx'] = MagicMock()
-sys.modules['config'] = MagicMock()
-sys.modules['sqlalchemy'] = MagicMock()
-sys.modules['database'] = MagicMock()
-sys.modules['database.db'] = MagicMock()
-sys.modules['database.models'] = MagicMock()
+sys.modules["pypdf"] = MagicMock()
+sys.modules["chromadb"] = MagicMock()
+sys.modules["chromadb.config"] = MagicMock()
+sys.modules["httpx"] = MagicMock()
+sys.modules["config"] = MagicMock()
+sys.modules["sqlalchemy"] = MagicMock()
+sys.modules["database"] = MagicMock()
+sys.modules["database.db"] = MagicMock()
+sys.modules["database.models"] = MagicMock()
 
 # Mock services.gemini because services/__init__.py might import it
-sys.modules['services.gemini'] = MagicMock()
-sys.modules['services.image_gen'] = MagicMock()
-sys.modules['services.memory'] = MagicMock()
+sys.modules["services.gemini"] = MagicMock()
+sys.modules["services.image_gen"] = MagicMock()
+sys.modules["services.memory"] = MagicMock()
 # But NOT services.rag, as we want to import it (or reload it)
 
 # Mock attributes on config
-sys.modules['config'].GEMINI_API_BASE = "https://api.example.com"
-sys.modules['config'].GEMINI_API_KEY = "dummy_key"
-sys.modules['config'].RAG_CHROMA_PATH = "/tmp/chroma"
-sys.modules['config'].RAG_EMBEDDING_MODEL = "embedding-001"
+sys.modules["config"].GEMINI_API_BASE = "https://api.example.com"
+sys.modules["config"].GEMINI_API_KEY = "dummy_key"
+sys.modules["config"].RAG_CHROMA_PATH = "/tmp/chroma"
+sys.modules["config"].RAG_EMBEDDING_MODEL = "embedding-001"
 
 # Now import the module under test
-if 'services.rag' in sys.modules:
-    del sys.modules['services.rag']
+if "services.rag" in sys.modules:
+    del sys.modules["services.rag"]
 # Also delete services package if loaded, to force re-import logic if needed
-if 'services' in sys.modules:
-    del sys.modules['services']
+if "services" in sys.modules:
+    del sys.modules["services"]
 
 import services.rag
+
 
 class TestRagService(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -45,10 +46,12 @@ class TestRagService(unittest.IsolatedAsyncioTestCase):
         services.rag._chroma_client = None
         services.rag._chroma_collection = None
 
-    @patch('services.rag.PdfReader')
-    @patch('services.rag.httpx.AsyncClient')
-    @patch('services.rag._get_chroma')
-    async def test_add_pdf_document_success(self, mock_get_chroma, mock_httpx_client, mock_pdf_reader):
+    @patch("services.rag.PdfReader")
+    @patch("services.rag.httpx.AsyncClient")
+    @patch("services.rag._get_chroma")
+    async def test_add_pdf_document_success(
+        self, mock_get_chroma, mock_httpx_client, mock_pdf_reader
+    ):
         # Mock PDF extraction
         mock_pdf = MagicMock()
         mock_page = MagicMock()
@@ -59,11 +62,7 @@ class TestRagService(unittest.IsolatedAsyncioTestCase):
         # Mock Embeddings API
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "data": [
-                {"embedding": [0.1, 0.2, 0.3], "index": 0}
-            ]
-        }
+        mock_response.json.return_value = {"data": [{"embedding": [0.1, 0.2, 0.3], "index": 0}]}
 
         mock_client_instance = AsyncMock()
         mock_client_instance.post.return_value = mock_response
@@ -87,7 +86,7 @@ class TestRagService(unittest.IsolatedAsyncioTestCase):
         mock_pdf_reader.assert_called_once()
         mock_collection.add.assert_called_once()
 
-    @patch('services.rag.PdfReader')
+    @patch("services.rag.PdfReader")
     async def test_add_pdf_document_empty_text(self, mock_pdf_reader):
         # Mock PDF extraction returning empty
         mock_pdf = MagicMock()
@@ -101,5 +100,6 @@ class TestRagService(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(success)
         self.assertIn("мало текста", message)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

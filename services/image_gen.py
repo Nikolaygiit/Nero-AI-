@@ -210,7 +210,6 @@ async def generate_with_queue(
     global _active_generations
     async with _gen_lock:
         _active_generations += 1
-        position = _active_generations
 
     try:
         return await image_generator.generate(prompt, user_id, style, size)
