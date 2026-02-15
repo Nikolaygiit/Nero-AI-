@@ -5,6 +5,7 @@ Revises: 003
 Create Date: 2026-02-06
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -19,9 +20,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def _table_exists(connection, name: str) -> bool:
-    result = connection.execute(text(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=:name"
-    ), {"name": name})
+    result = connection.execute(
+        text("SELECT name FROM sqlite_master WHERE type='table' AND name=:name"), {"name": name}
+    )
     return result.fetchone() is not None
 
 

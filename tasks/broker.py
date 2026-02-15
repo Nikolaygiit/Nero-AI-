@@ -1,4 +1,5 @@
 """Taskiq broker — Redis. Очереди задач для тяжёлых операций (генерация изображений и т.д.)."""
+
 import logging
 from typing import Optional
 
@@ -26,6 +27,7 @@ async def get_taskiq_queue_length() -> int:
     """
     try:
         from redis.asyncio import from_url
+
         client = from_url(config.settings.REDIS_URL)
         try:
             return await client.llen(TASKIQ_DEFAULT_QUEUE)

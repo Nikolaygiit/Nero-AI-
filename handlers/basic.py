@@ -1,6 +1,7 @@
 """
 Базовые команды бота (/start, /help, /clear)
 """
+
 import logging
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -27,7 +28,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         telegram_id=user_id,
         username=update.effective_user.username,
         first_name=user_name,
-        language='ru'
+        language="ru",
     )
 
     # Получаем статистику
@@ -36,7 +37,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Получаем количество доступных моделей
     available_models = await gemini_service.list_available_models()
-    image_models = [m for m in available_models if 'image' in m.lower() or 'imagen' in m.lower()]
+    image_models = [m for m in available_models if "image" in m.lower() or "imagen" in m.lower()]
     image_count = len(image_models) if image_models else 9
 
     # Приветствие
@@ -71,31 +72,27 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [
             InlineKeyboardButton("💬 Чат с Gemini", callback_data="menu_chat"),
-            InlineKeyboardButton("🎨 Создать изображение", callback_data="menu_create_image")
+            InlineKeyboardButton("🎨 Создать изображение", callback_data="menu_create_image"),
         ],
         [
             InlineKeyboardButton("🤖 Выбрать модель", callback_data="menu_models"),
-            InlineKeyboardButton("👤 Персонажи", callback_data="menu_personas")
+            InlineKeyboardButton("👤 Персонажи", callback_data="menu_personas"),
         ],
         [
             InlineKeyboardButton("📸 Анализ фото", callback_data="menu_photo_analysis"),
-            InlineKeyboardButton("💻 Генерация кода", callback_data="menu_code_gen")
+            InlineKeyboardButton("💻 Генерация кода", callback_data="menu_code_gen"),
         ],
         [
             InlineKeyboardButton("📊 Статистика", callback_data="menu_stats"),
-            InlineKeyboardButton("⚙️ Настройки", callback_data="menu_settings_new")
-        ]
+            InlineKeyboardButton("⚙️ Настройки", callback_data="menu_settings_new"),
+        ],
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(
-        welcome_text,
-        parse_mode=None,
-        reply_markup=reply_markup
-    )
+    await update.message.reply_text(welcome_text, parse_mode=None, reply_markup=reply_markup)
 
-    await db.update_stats(user_id, command='start')
+    await db.update_stats(user_id, command="start")
     track("started_bot", str(user_id))
 
     # Получаем пользователя для проверки
@@ -141,7 +138,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("🏠 Главное меню", callback_data="menu_main")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(help_text, parse_mode='Markdown', reply_markup=reply_markup)
+    await update.message.reply_text(help_text, parse_mode="Markdown", reply_markup=reply_markup)
 
 
 async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -157,4 +154,4 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 💡 Теперь бот начнет диалог с чистого листа
 """
 
-    await update.message.reply_text(success_msg, parse_mode='Markdown')
+    await update.message.reply_text(success_msg, parse_mode="Markdown")
