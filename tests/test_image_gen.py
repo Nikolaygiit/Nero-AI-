@@ -1,6 +1,6 @@
-import sys
-from unittest.mock import MagicMock, AsyncMock
 import asyncio
+import sys
+from unittest.mock import AsyncMock, MagicMock
 
 # --- Mocking external dependencies BEFORE import ---
 sys.modules['httpx'] = MagicMock()
@@ -32,13 +32,12 @@ sys.modules['database'] = mock_db_module
 
 # --- End of Mocks ---
 
-import pytest
 import base64
-from unittest.mock import patch
 
 # Now import the class to test
 # This should now work because deps are mocked
 from services.image_gen import ArtemoxImageGenerator
+
 
 def test_artemox_generate_with_image():
     """Тест генерации изображения с исходным изображением (img2img)"""
