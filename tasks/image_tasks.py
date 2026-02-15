@@ -1,6 +1,7 @@
 """
 Фоновая генерация изображений — бот отвечает "Взял в работу", результат приходит позже
 """
+
 import logging
 from io import BytesIO
 
@@ -25,11 +26,15 @@ if broker:
     ) -> None:
         """Фоновая задача: генерирует изображение и отправляет пользователю."""
         try:
-            image_bytes, strategy = await image_generator.generate(prompt, user_id, style=style, size=size)
+            image_bytes, strategy = await image_generator.generate(
+                prompt, user_id, style=style, size=size
+            )
             bot = Bot(token=config.settings.TELEGRAM_BOT_TOKEN)
             photo = BytesIO(image_bytes)
             photo.name = "image.png"
-            caption = f"✨ Изображение готово!\n\n📝 Описание: {prompt}\n💡 Использовано: {strategy}"
+            caption = (
+                f"✨ Изображение готово!\n\n📝 Описание: {prompt}\n💡 Использовано: {strategy}"
+            )
             await bot.send_photo(
                 chat_id=chat_id,
                 photo=photo,
