@@ -2,6 +2,7 @@
 RAG (Retrieval-Augmented Generation): PDF → чанки → эмбеддинги → ChromaDB.
 При вопросе пользователя ищем похожие фрагменты и подставляем в контекст LLM.
 """
+
 import asyncio
 import hashlib
 import logging
@@ -11,7 +12,6 @@ from typing import List, Optional
 
 import httpx
 from pypdf import PdfReader
-from io import BytesIO
 
 import config
 
@@ -41,7 +41,9 @@ def _get_chroma():
         raise RuntimeError("Установите chromadb: pip install chromadb")
     path = Path(config.RAG_CHROMA_PATH)
     path.mkdir(parents=True, exist_ok=True)
-    _chroma_client = chromadb.PersistentClient(path=str(path), settings=ChromaSettings(anonymized_telemetry=False))
+    _chroma_client = chromadb.PersistentClient(
+        path=str(path), settings=ChromaSettings(anonymized_telemetry=False)
+    )
     _chroma_collection = _chroma_client.get_or_create_collection(
         name="rag_docs",
         metadata={"description": "RAG chunks from user PDFs"},
@@ -107,27 +109,31 @@ def _chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OV
     return chunks
 
 
-def _pdf_to_text(pdf_bytes: bytes) -> str:
+def _pdf_to_text(pdf_path: str) -> str:
     """Извлечь текст из PDF."""
-    reader = PdfReader(BytesIO(pdf_bytes))
-    parts = []
-    for page in reader.pages:
-        try:
-            t = page.extract_text()
-            if t:
-                parts.append(t)
-        except Exception as e:
-            logger.warning("Ошибка извлечения страницы PDF: %s", e)
-    return "\n".join(parts) if parts else ""
+    try:
+        reader = PdfReader(pdf_path)
+        parts = []
+        for page in reader.pages:
+            try:
+                t = page.extract_text()
+                if t:
+                    parts.append(t)
+            except Exception as e:
+                logger.warning("Ошибка извлечения страницы PDF: %s", e)
+        return "\n".join(parts) if parts else ""
+    except Exception as e:
+        logger.error(f"Failed to read PDF file at {pdf_path}: {e}")
+        return ""
 
 
-async def add_pdf_document(user_id: int, pdf_bytes: bytes, filename: str) -> tuple[bool, str]:
+async def add_pdf_document(user_id: int, pdf_path: str, filename: str) -> tuple[bool, str]:
     """
     Добавить PDF в векторную БД для пользователя.
     Возвращает (success, message).
     """
     loop = asyncio.get_event_loop()
-    text = await loop.run_in_executor(None, _pdf_to_text, pdf_bytes)
+    text = await loop.run_in_executor(None, _pdf_to_text, pdf_path)
     if not text or len(text.strip()) < 50:
         return False, "В PDF мало текста или он не извлечён. Попробуйте другой файл."
 
@@ -144,11 +150,21 @@ async def add_pdf_document(user_id: int, pdf_bytes: bytes, filename: str) -> tup
     if len(embeddings) != len(chunks):
         return False, "Ошибка: число эмбеддингов не совпадает с числом чанков."
 
-    doc_id = hashlib.sha256(pdf_bytes[:8192]).hexdigest()[:16]
+    try:
+        with open(pdf_path, "rb") as f:
+            head = f.read(8192)
+    except Exception as e:
+        logger.error(f"Failed to read file for hashing: {e}")
+        return False, "Ошибка чтения файла."
+
+    doc_id = hashlib.sha256(head).hexdigest()[:16]
     collection = await loop.run_in_executor(None, _get_chroma)
     user_str = str(user_id)
     ids = [f"{user_str}_{doc_id}_{i}" for i in range(len(chunks))]
-    metadatas = [{"user_id": user_str, "doc_name": filename[:200], "chunk_idx": i} for i in range(len(chunks))]
+    metadatas = [
+        {"user_id": user_str, "doc_name": filename[:200], "chunk_idx": i}
+        for i in range(len(chunks))
+    ]
 
     def _add():
         collection.add(
@@ -159,8 +175,13 @@ async def add_pdf_document(user_id: int, pdf_bytes: bytes, filename: str) -> tup
         )
 
     await loop.run_in_executor(None, _add)
-    logger.info("RAG: added document user_id=%s filename=%s chunks=%s", user_id, filename, len(chunks))
-    return True, f"Документ «{filename}» добавлен. Фрагментов: {len(chunks)}. Можете задавать вопросы по нему."
+    logger.info(
+        "RAG: added document user_id=%s filename=%s chunks=%s", user_id, filename, len(chunks)
+    )
+    return (
+        True,
+        f"Документ «{filename}» добавлен. Фрагментов: {len(chunks)}. Можете задавать вопросы по нему.",
+    )
 
 
 async def get_rag_context(user_id: int, query: str, top_k: int = RAG_TOP_K) -> Optional[str]:
@@ -193,11 +214,9 @@ async def get_rag_context(user_id: int, query: str, top_k: int = RAG_TOP_K) -> O
     if not result or not result.get("documents") or not result["documents"][0]:
         return None
     docs = result["documents"][0]
-    distances = result.get("distances", [[]])[0] if result.get("distances") else []
     # ChromaDB по умолчанию L2: меньше = ближе. Нормализуем в условную «релевантность»
     chosen = []
     for i, doc in enumerate(docs):
-        d = distances[i] if i < len(distances) else 0
         # Простой порог: если расстояние очень большое, не брать (зависит от метрики)
         chosen.append(doc)
     if not chosen:
@@ -226,7 +245,7 @@ async def list_rag_documents(user_id: int) -> List[str]:
     def _get():
         r = collection.get(where={"user_id": str(user_id)}, include=["metadatas"])
         names = set()
-        for m in (r.get("metadatas") or []):
+        for m in r.get("metadatas") or []:
             if m and isinstance(m, dict):
                 n = m.get("doc_name")
                 if n:

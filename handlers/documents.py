@@ -2,14 +2,18 @@
 Обработка загруженных документов (PDF) для RAG.
 Пользователь отправляет PDF — бот извлекает текст, чанкует, строит эмбеддинги и сохраняет в ChromaDB.
 """
+
 import logging
+import os
+import tempfile
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from database import db
-from services.rag import add_pdf_document, list_rag_documents, clear_rag_documents
 from middlewares.rate_limit import rate_limit_middleware
 from middlewares.usage_limit import check_can_make_request
+from services.rag import add_pdf_document, clear_rag_documents, list_rag_documents
 
 logger = logging.getLogger(__name__)
 
@@ -38,12 +42,14 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if doc.file_size and doc.file_size > MAX_PDF_BYTES:
         await update.message.reply_text(
-            f"⚠️ Файл слишком большой (макс. {MAX_PDF_BYTES // (1024*1024)} МБ). Отправьте меньший PDF."
+            f"⚠️ Файл слишком большой (макс. {MAX_PDF_BYTES // (1024 * 1024)} МБ). Отправьте меньший PDF."
         )
         return
 
     if not await rate_limit_middleware.check_rate_limit(user_id):
-        await update.message.reply_text("⏳ Слишком много запросов. Подождите минуту.", parse_mode=None)
+        await update.message.reply_text(
+            "⏳ Слишком много запросов. Подождите минуту.", parse_mode=None
+        )
         return
     can_proceed, limit_msg = await check_can_make_request(user_id)
     if not can_proceed:
@@ -51,11 +57,18 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     status_msg = await update.message.reply_text("📄 Читаю PDF и добавляю в базу знаний...")
+    temp_path = None
     try:
         file = await context.bot.get_file(doc.file_id)
-        pdf_bytes = await file.download_as_bytearray()
-        pdf_bytes = bytes(pdf_bytes)
-        ok, message = await add_pdf_document(user_id, pdf_bytes, doc.file_name or "document.pdf")
+
+        # Create a temp file to download to
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+            temp_path = tmp_file.name
+
+        # Download to disk (streams, avoids loading into RAM)
+        await file.download_to_drive(custom_path=temp_path)
+
+        ok, message = await add_pdf_document(user_id, temp_path, doc.file_name or "document.pdf")
         await status_msg.edit_text(message, parse_mode=None)
     except Exception as e:
         logger.exception("RAG document processing failed: %s", e)
@@ -64,6 +77,12 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Убедитесь, что файл — это текстный PDF (не скан без OCR).",
             parse_mode=None,
         )
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception as e:
+                logger.warning(f"Failed to remove temp file {temp_path}: {e}")
 
 
 async def rag_docs_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
