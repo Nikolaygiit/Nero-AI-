@@ -4,7 +4,8 @@ import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Configure sys.path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 
 async def run_chat_stream_optimization():
     """Test the streaming loop optimization in handle_message"""
@@ -30,41 +31,43 @@ async def run_chat_stream_optimization():
 
     # Mock other dependencies
     mocks = {
-        'database': mock_db,
-        'services.gemini': mock_gemini,
-        'services.image_gen': MagicMock(),
-        'tasks.image_tasks': MagicMock(),
-        'tasks.broker': MagicMock(),
-        'middlewares.rate_limit': MagicMock(),
-        'middlewares.usage_limit': MagicMock(),
-        'utils.text_tools': MagicMock(),
-        'utils.analytics': MagicMock(),
-        'utils.i18n': MagicMock(),
-        'services.memory': MagicMock(),
-        'services.rag': MagicMock(),
-        'services.speech': MagicMock(),
-        'config': MagicMock(),
-        'telegram': MagicMock(),
-        'telegram.ext': MagicMock(),
-        'telegram.error': MagicMock(),
-        'structlog': MagicMock(),
-        'httpx': MagicMock(),
-        'sqlalchemy': MagicMock(),
-        'sqlalchemy.ext.asyncio': MagicMock(),
-        'pydantic': MagicMock()
+        "database": mock_db,
+        "services.gemini": mock_gemini,
+        "services.image_gen": MagicMock(),
+        "tasks.image_tasks": MagicMock(),
+        "tasks.broker": MagicMock(),
+        "middlewares.rate_limit": MagicMock(),
+        "middlewares.usage_limit": MagicMock(),
+        "utils.text_tools": MagicMock(),
+        "utils.analytics": MagicMock(),
+        "utils.i18n": MagicMock(),
+        "services.memory": MagicMock(),
+        "services.rag": MagicMock(),
+        "services.speech": MagicMock(),
+        "config": MagicMock(),
+        "telegram": MagicMock(),
+        "telegram.ext": MagicMock(),
+        "telegram.error": MagicMock(),
+        "structlog": MagicMock(),
+        "httpx": MagicMock(),
+        "sqlalchemy": MagicMock(),
+        "sqlalchemy.ext.asyncio": MagicMock(),
+        "pydantic": MagicMock(),
     }
 
-    mocks['middlewares.rate_limit'].rate_limit_middleware.check_rate_limit = AsyncMock(return_value=True)
-    mocks['middlewares.usage_limit'].check_can_make_request = AsyncMock(return_value=(True, ""))
-    mocks['utils.text_tools'].sanitize_markdown = lambda x: x
-    mocks['utils.i18n'].t.return_value = "Thinking..."
-    mocks['services.memory'].extract_and_save_facts = AsyncMock()
-    mocks['services.rag'].get_rag_context = AsyncMock(return_value="")
+    mocks["middlewares.rate_limit"].rate_limit_middleware.check_rate_limit = AsyncMock(
+        return_value=True
+    )
+    mocks["middlewares.usage_limit"].check_can_make_request = AsyncMock(return_value=(True, ""))
+    mocks["utils.text_tools"].sanitize_markdown = lambda x: x
+    mocks["utils.i18n"].t.return_value = "Thinking..."
+    mocks["services.memory"].extract_and_save_facts = AsyncMock()
+    mocks["services.rag"].get_rag_context = AsyncMock(return_value="")
 
     # Apply patches safely
     with patch.dict(sys.modules, mocks):
-        if 'handlers.chat' in sys.modules:
-            del sys.modules['handlers.chat']
+        if "handlers.chat" in sys.modules:
+            del sys.modules["handlers.chat"]
 
         from handlers.chat import handle_message
 
@@ -96,8 +99,8 @@ async def run_chat_stream_optimization():
                 break
 
         if not found:
-             edit_calls = mock_status_msg.edit_text.call_args_list
-             for call in edit_calls:
+            edit_calls = mock_status_msg.edit_text.call_args_list
+            for call in edit_calls:
                 args, _ = call
                 if args and expected_text in str(args[0]):
                     found = True
@@ -105,8 +108,10 @@ async def run_chat_stream_optimization():
 
         assert found, f"Expected final reply '{expected_text}' not found. Reply calls: {calls}"
 
+
 def test_chat_stream_optimization():
     asyncio.run(run_chat_stream_optimization())
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     test_chat_stream_optimization()
