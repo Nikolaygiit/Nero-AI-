@@ -1,6 +1,7 @@
 """
 Базовые тесты для бота (unittest version)
 """
+
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -15,7 +16,7 @@ from services.gemini import GeminiService
 class TestBasic(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         """Настройка перед каждым тестом"""
-        db.db_path = ':memory:'
+        db.db_path = ":memory:"
         await db.init()
 
     async def asyncTearDown(self):
@@ -30,9 +31,7 @@ class TestBasic(unittest.IsolatedAsyncioTestCase):
     async def test_create_user(self):
         """Тест создания пользователя"""
         user = await db.create_or_update_user(
-            telegram_id=12345,
-            username="test_user",
-            first_name="Test"
+            telegram_id=12345, username="test_user", first_name="Test"
         )
 
         self.assertIsNotNone(user)
@@ -62,23 +61,20 @@ class TestBasic(unittest.IsolatedAsyncioTestCase):
         await db.create_or_update_user(telegram_id=12345)
 
         await db.update_stats(12345, requests_count=1, tokens_used=100)
-        await db.update_stats(12345, command='start')
+        await db.update_stats(12345, command="start")
 
         stats = await db.get_stats(12345)
         self.assertIsNotNone(stats)
         self.assertEqual(stats.requests_count, 1)
         self.assertEqual(stats.tokens_used, 100)
-        self.assertEqual(stats.commands_used.get('start'), 1)
+        self.assertEqual(stats.commands_used.get("start"), 1)
 
     async def test_gemini_service_list_models(self):
         """Тест получения списка моделей"""
-        with patch('httpx.AsyncClient') as mock_client:
+        with patch("httpx.AsyncClient") as mock_client:
             mock_response = MagicMock()
             mock_response.json.return_value = {
-                'data': [
-                    {'id': 'gemini-2.0-flash'},
-                    {'id': 'gemini-3-pro-preview'}
-                ]
+                "data": [{"id": "gemini-2.0-flash"}, {"id": "gemini-3-pro-preview"}]
             }
             mock_response.raise_for_status = MagicMock()
 
@@ -106,5 +102,5 @@ class TestBasic(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await middleware.check_rate_limit(12345))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
