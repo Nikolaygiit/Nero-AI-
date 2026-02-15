@@ -1,8 +1,11 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from telegram import Update, User, Message, Chat
+
+import pytest
+from telegram import Chat, Message, Update, User
+
 from handlers.chat import handle_message
-from handlers.chat_utils import is_image_request, get_image_prompt
+from handlers.chat_utils import get_image_prompt, is_image_request
+
 
 @pytest.fixture
 def mock_update():
@@ -34,9 +37,9 @@ async def mock_db():
 
 @pytest.mark.asyncio
 async def test_is_image_request():
-    assert is_image_request("создай картинку кот") == True
-    assert is_image_request("нарисуй пейзаж") == True
-    assert is_image_request("привет, как дела?") == False
+    assert is_image_request("создай картинку кот")
+    assert is_image_request("нарисуй пейзаж")
+    assert not is_image_request("привет, как дела?")
 
 @pytest.mark.asyncio
 async def test_get_image_prompt():
