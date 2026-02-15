@@ -198,9 +198,7 @@ async def chat_completion(
 
     for provider in providers:
         models_order = provider.models.copy()
-        if model_hint and provider.name == "artemox" and model_hint not in models_order:
-            models_order = [model_hint] + [m for m in models_order if m != model_hint]
-        elif model_hint and provider.name == "artemox":
+        if model_hint and provider.name == "artemox":
             models_order = [model_hint] + [m for m in models_order if m != model_hint]
         for model in models_order:
             model_key = f"{provider.name}:{model}"
