@@ -8,11 +8,11 @@ from typing import AsyncGenerator
 
 try:
     from prometheus_client import (
+        REGISTRY,
         Counter,
         Histogram,
-        start_http_server,
-        REGISTRY,
         generate_latest,
+        start_http_server,
     )
     PROMETHEUS_AVAILABLE = True
 except ImportError:
