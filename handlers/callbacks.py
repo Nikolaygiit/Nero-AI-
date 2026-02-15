@@ -587,7 +587,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await safe_callback_answer(query, "Нет запроса для перегенерации", show_alert=True)
             return
         await safe_callback_answer(query, "🔄 Перегенерирую...")
-        from handlers.chat import generate_and_reply_text
+        from handlers.chat_utils import generate_and_reply_text
         from utils.text_tools import sanitize_markdown
         from services.rag import get_rag_context
         try:
