@@ -184,8 +184,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     STREAM_EDIT_INTERVAL = 1.5  # обновлять сообщение не чаще раз в 1.5 сек (защита от лимитов Telegram)
     try:
         status_msg = await update.message.reply_text(t("thinking"))
-        accumulated = ""
+        chunks = []
+        current_len = 0
         last_edit_at = 0.0
+        accumulated = ""
         try:
             async for chunk in gemini_service.generate_content_stream(
                 prompt=user_message,
@@ -193,10 +195,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 use_context=True,
                 rag_context=rag_context,
             ):
-                accumulated += chunk
+                chunks.append(chunk)
+                current_len += len(chunk)
                 now = time.monotonic()
                 # Обновляем сообщение раз в 1–2 сек, чтобы не спамить API и выглядело как стриминг
-                if len(accumulated) > 50 and (now - last_edit_at >= STREAM_EDIT_INTERVAL):
+                if current_len > 50 and (now - last_edit_at >= STREAM_EDIT_INTERVAL):
+                    accumulated = "".join(chunks)
                     try:
                         safe = sanitize_markdown(accumulated)
                         await status_msg.edit_text(safe, parse_mode="Markdown")
@@ -210,7 +214,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         last_edit_at = now
                     except Exception:
                         pass
-            response = accumulated
+            response = "".join(chunks)
             # Финальное обновление: если не успели обновить в последнем интервале — показываем полный текст
             if response and (time.monotonic() - last_edit_at >= STREAM_EDIT_INTERVAL or last_edit_at == 0):
                 try:
