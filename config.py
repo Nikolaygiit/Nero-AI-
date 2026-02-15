@@ -3,6 +3,7 @@
 Бот не запустится, если обязательные ключи отсутствуют.
 """
 from typing import List
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
