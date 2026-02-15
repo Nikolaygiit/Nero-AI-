@@ -3,9 +3,9 @@ import sys
 from unittest.mock import AsyncMock, MagicMock
 
 # Mock dependencies to avoid import errors
-sys.modules['database'] = MagicMock()
-sys.modules['config'] = MagicMock()
-sys.modules['httpx'] = MagicMock()
+sys.modules["database"] = MagicMock()
+sys.modules["config"] = MagicMock()
+sys.modules["httpx"] = MagicMock()
 
 # Now we can import the service
 # ruff: noqa: E402
@@ -17,12 +17,7 @@ def test_get_categorized_models_caching():
         service = GeminiService()
 
         # Define some mock models
-        mock_models = [
-            "gemini-1.5-pro",
-            "gemini-1.5-flash",
-            "gemini-pro-vision",
-            "imagen-3.0"
-        ]
+        mock_models = ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-pro-vision", "imagen-3.0"]
 
         # Mock list_available_models
         service.list_available_models = AsyncMock(return_value=mock_models)
@@ -30,10 +25,10 @@ def test_get_categorized_models_caching():
         # First call - should categorize
         text_models1, image_models1 = await service.get_categorized_models()
 
-        assert "gemini-1.5-pro" in text_models1['pro']
-        assert "gemini-1.5-flash" in text_models1['flash']
+        assert "gemini-1.5-pro" in text_models1["pro"]
+        assert "gemini-1.5-flash" in text_models1["flash"]
         # Based on logic, imagen-3.0 falls to medium unless specific keywords present
-        assert "imagen-3.0" in image_models1['medium']
+        assert "imagen-3.0" in image_models1["medium"]
 
         # Check if caching attributes are set
         assert service._categorized_models_cache is not None
@@ -57,7 +52,7 @@ def test_get_categorized_models_caching():
         text_models3, image_models3 = await service.get_categorized_models()
 
         assert text_models3 is not text_models1
-        assert "gemini-2.0-pro" in text_models3['pro']
+        assert "gemini-2.0-pro" in text_models3["pro"]
         assert service._last_models_ref is new_mock_models
 
     asyncio.run(run_test())
@@ -68,14 +63,14 @@ def test_categorization_logic_correctness():
         service = GeminiService()
 
         mock_models = [
-            "gemini-3-pro-image",          # premium
-            "gemini-4.0-ultra-image",      # premium
-            "imagen-4.0-generate",         # high
+            "gemini-3-pro-image",  # premium
+            "gemini-4.0-ultra-image",  # premium
+            "imagen-4.0-generate",  # high
             "gemini-2.5-flash-image-preview",  # high
-            "imagen-3.0",                  # medium
-            "gemini-1.5-pro",              # text pro
-            "gemini-1.5-flash",            # text flash
-            "gemini-1.0-pro"               # text pro
+            "imagen-3.0",  # medium
+            "gemini-1.5-pro",  # text pro
+            "gemini-1.5-flash",  # text flash
+            "gemini-1.0-pro",  # text pro
         ]
 
         service.list_available_models = AsyncMock(return_value=mock_models)
@@ -83,15 +78,15 @@ def test_categorization_logic_correctness():
         text_models, image_models = await service.get_categorized_models()
 
         # Check Image Models
-        assert "gemini-3-pro-image" in image_models['premium']
-        assert "gemini-4.0-ultra-image" in image_models['premium']
-        assert "imagen-4.0-generate" in image_models['high']
-        assert "gemini-2.5-flash-image-preview" in image_models['high']
-        assert "imagen-3.0" in image_models['medium']
+        assert "gemini-3-pro-image" in image_models["premium"]
+        assert "gemini-4.0-ultra-image" in image_models["premium"]
+        assert "imagen-4.0-generate" in image_models["high"]
+        assert "gemini-2.5-flash-image-preview" in image_models["high"]
+        assert "imagen-3.0" in image_models["medium"]
 
         # Check Text Models
-        assert "gemini-1.5-pro" in text_models['pro']
-        assert "gemini-1.0-pro" in text_models['pro']
-        assert "gemini-1.5-flash" in text_models['flash']
+        assert "gemini-1.5-pro" in text_models["pro"]
+        assert "gemini-1.0-pro" in text_models["pro"]
+        assert "gemini-1.5-flash" in text_models["flash"]
 
     asyncio.run(run_test())
