@@ -61,15 +61,16 @@ async def _embed_texts(texts: List[str]) -> List[List[float]]:
     # Некоторые API принимают только один input; делаем батчи по 1 для совместимости
     all_embeddings: List[List[float]] = []
     batch_size = 20
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i : i + batch_size]
-        # Стандарт: input может быть строкой или массивом строк
-        body = {
-            "model": config.RAG_EMBEDDING_MODEL,
-            "input": batch[0] if len(batch) == 1 else batch,
-        }
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            for i in range(0, len(texts), batch_size):
+                batch = texts[i : i + batch_size]
+                # Стандарт: input может быть строкой или массивом строк
+                body = {
+                    "model": config.RAG_EMBEDDING_MODEL,
+                    "input": batch[0] if len(batch) == 1 else batch,
+                }
                 resp = await client.post(url, headers=headers, json=body)
                 if resp.status_code != 200:
                     err = resp.text
@@ -85,9 +86,10 @@ async def _embed_texts(texts: List[str]) -> List[List[float]]:
                     emb = it.get("embedding")
                     if emb is not None:
                         all_embeddings.append(emb)
-        except Exception as e:
-            logger.exception("Embeddings request failed: %s", e)
-            raise
+    except Exception as e:
+        logger.exception("Embeddings request failed: %s", e)
+        raise
+
     return all_embeddings
 
 
