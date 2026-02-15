@@ -1,12 +1,25 @@
 """
 Базовые тесты для бота
 """
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pytest_asyncio
 
 from database import db
 from services.gemini import GeminiService
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def cleanup_database():
+    """Fixture to ensure database is clean for each test"""
+    # Use in-memory database for tests
+    db.db_path = ":memory:"
+    yield
+    # Ensure connection is closed
+    if db.engine:
+        await db.close()
 
 
 @pytest.mark.asyncio
@@ -25,9 +38,7 @@ async def test_create_user():
 
     try:
         user = await db.create_or_update_user(
-            telegram_id=12345,
-            username="test_user",
-            first_name="Test"
+            telegram_id=12345, username="test_user", first_name="Test"
         )
 
         assert user is not None
@@ -76,14 +87,14 @@ async def test_update_stats():
 
         # Обновляем статистику
         await db.update_stats(12345, requests_count=1, tokens_used=100)
-        await db.update_stats(12345, command='start')
+        await db.update_stats(12345, command="start")
 
         # Проверяем статистику
         stats = await db.get_stats(12345)
         assert stats is not None
         assert stats.requests_count == 1
         assert stats.tokens_used == 100
-        assert stats.commands_used.get('start') == 1
+        assert stats.commands_used.get("start") == 1
     finally:
         await db.close()
 
@@ -91,13 +102,10 @@ async def test_update_stats():
 @pytest.mark.asyncio
 async def test_gemini_service_list_models():
     """Тест получения списка моделей"""
-    with patch('httpx.AsyncClient') as mock_client:
+    with patch("httpx.AsyncClient") as mock_client:
         mock_response = MagicMock()
         mock_response.json.return_value = {
-            'data': [
-                {'id': 'gemini-2.0-flash'},
-                {'id': 'gemini-3-pro-preview'}
-            ]
+            "data": [{"id": "gemini-2.0-flash"}, {"id": "gemini-3-pro-preview"}]
         }
         mock_response.raise_for_status = MagicMock()
 
@@ -127,5 +135,5 @@ async def test_rate_limit_middleware():
     assert await middleware.check_rate_limit(12345) is False
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
