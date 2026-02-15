@@ -4,12 +4,12 @@
 """
 import shutil
 import time
-from pathlib import Path
 from datetime import datetime
-import structlog
+from pathlib import Path
 
-from watchdog.observers import Observer
+import structlog
 from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 logger = structlog.get_logger(__name__)
 

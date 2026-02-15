@@ -38,8 +38,6 @@ services:
     image: redis:7-alpine
     container_name: nero-ai-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:

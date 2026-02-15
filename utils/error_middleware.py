@@ -9,9 +9,10 @@ import asyncio
 import logging
 import traceback
 from functools import wraps
+
 from telegram import Update
-from telegram.ext import ContextTypes
 from telegram.error import NetworkError
+from telegram.ext import ContextTypes
 
 import config
 

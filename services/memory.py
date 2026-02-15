@@ -5,9 +5,11 @@ RAG Lite — долгосрочная память: факты о пользов
 """
 import json
 import re
-import structlog
-from typing import List, Optional, Dict
+from typing import Dict
 
+import structlog
+
+import config
 from database import db
 from services.gemini import gemini_service
 
@@ -54,9 +56,9 @@ async def extract_facts_with_gemini(user_message: str) -> Dict[str, str]:
             prompt=prompt,
             user_id=None,  # без контекста пользователя
             use_context=False,
-            model=fact_model
+            model=fact_model,
         )
-        
+
         # Очищаем ответ от markdown блоков кода, если есть
         response = response.strip()
         if response.startswith("```json"):
@@ -66,14 +68,23 @@ async def extract_facts_with_gemini(user_message: str) -> Dict[str, str]:
         if response.endswith("```"):
             response = response[:-3]
         response = response.strip()
-        
+
         # Парсим JSON
-        facts = json.loads(response)
+        try:
+            facts = json.loads(response)
+        except json.JSONDecodeError:
+            # Fallback: пробуем найти JSON внутри текста, если модель болтлива
+            match = re.search(r"\{.*\}", response, re.DOTALL)
+            if match:
+                facts = json.loads(match.group(0))
+            else:
+                raise
+
         if isinstance(facts, dict):
             # Фильтруем пустые значения
             return {k: str(v).strip()[:200] for k, v in facts.items() if v and str(v).strip()}
         return {}
-    except json.JSONDecodeError as e:
+    except (json.JSONDecodeError, ValueError) as e:
         logger.debug("fact_extraction_failed", error=str(e), method="gemini")
         return {}
     except Exception as e:
@@ -89,10 +100,10 @@ async def extract_and_save_facts(user_id: int, user_message: str) -> None:
     msg_lower = user_message.lower().strip()
     if len(msg_lower) < 10:
         return
-    
+
     # Пробуем извлечь факты через Gemini
     facts = await extract_facts_with_gemini(user_message)
-    
+
     # Если Gemini вернул факты — сохраняем их
     if facts:
         for fact_type, fact_value in facts.items():
@@ -103,7 +114,7 @@ async def extract_and_save_facts(user_id: int, user_message: str) -> None:
                 except Exception as e:
                     logger.debug("fact_save_skipped", user_id=user_id, error=str(e))
         return
-    
+
     # Fallback: используем regex-паттерны
     for pattern, fact_type in FACT_PATTERNS:
         m = re.search(pattern, user_message, re.IGNORECASE)
@@ -125,17 +136,17 @@ async def get_relevant_facts(user_id: int, limit: int = 5) -> str:
     facts = await db.get_user_facts(user_id, limit=limit)
     if not facts:
         return ""
-    
+
     # Группируем факты по типам для лучшей читаемости
     fact_dict = {}
     for f in facts:
         if f.fact_type not in fact_dict:
             fact_dict[f.fact_type] = []
         fact_dict[f.fact_type].append(f.fact_value)
-    
+
     # Формируем читаемый текст
     lines = ["\nИзвестные факты о пользователе:"]
-    
+
     type_names = {
         "name": "Имя",
         "age": "Возраст",
@@ -146,10 +157,10 @@ async def get_relevant_facts(user_id: int, limit: int = 5) -> str:
         "education": "Образование",
         "skills": "Навыки",
     }
-    
+
     for fact_type, values in fact_dict.items():
         type_name = type_names.get(fact_type, fact_type)
         value_str = ", ".join(values) if len(values) > 1 else values[0]
         lines.append(f"- {type_name}: {value_str}")
-    
+
     return "\n".join(lines)

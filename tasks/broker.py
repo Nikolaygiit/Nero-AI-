@@ -2,7 +2,7 @@
 import logging
 from typing import Optional
 
-from taskiq_redis import RedisAsyncResultBackend, ListQueueBroker
+from taskiq_redis import ListQueueBroker, RedisAsyncResultBackend
 
 import config
 
