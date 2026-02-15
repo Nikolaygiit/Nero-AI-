@@ -10,6 +10,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from database import db
 from services.gemini import gemini_service
+from services.image_gen import generate_with_queue
 from services.speech import speech_to_text
 from middlewares.rate_limit import rate_limit_middleware
 from middlewares.usage_limit import check_can_make_request
@@ -42,8 +43,40 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     wants_generation = any(keyword in caption.lower() for keyword in generation_keywords)
     
     if wants_generation:
-        # TODO: Реализовать генерацию изображения на основе фото
-        await update.message.reply_text("⚠️ Генерация изображений на основе фото пока не реализована")
+        status_msg = await update.message.reply_text("🎨 Генерирую изображение на основе фото...")
+
+        try:
+            # Скачиваем изображение
+            photo_bytes = await file.download_as_bytearray()
+            image_base64 = base64.b64encode(photo_bytes).decode('utf-8')
+
+            # Генерируем изображение
+            image_bytes, strategy_name = await generate_with_queue(
+                prompt=caption,
+                user_id=user_id,
+                image=image_base64
+            )
+
+            # Отправляем результат
+            photo_file = BytesIO(image_bytes)
+            photo_file.name = "image.png"
+
+            result_caption = f"✨ Изображение готово!\n\n📝 Описание: {caption}\n💡 Использовано: {strategy_name}"
+
+            await update.message.reply_photo(
+                photo=photo_file,
+                caption=result_caption,
+                parse_mode=None
+            )
+
+            try:
+                await status_msg.delete()
+            except Exception:
+                pass
+
+        except Exception as e:
+            logger.error(f"Ошибка генерации img2img: {e}")
+            await status_msg.edit_text(f"❌ Ошибка генерации: {str(e)[:200]}")
         return
     
     # Обычный анализ изображения

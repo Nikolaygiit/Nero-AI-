@@ -21,7 +21,7 @@ class ImageGeneratorStrategy(ABC):
     """Абстрактный класс для стратегий генерации изображений"""
     
     @abstractmethod
-    async def generate(self, prompt: str, style: Optional[str] = None, size: Optional[str] = None) -> bytes:
+    async def generate(self, prompt: str, style: Optional[str] = None, size: Optional[str] = None, image: Optional[str] = None) -> bytes:
         """Генерировать изображение"""
         pass
     
@@ -41,7 +41,7 @@ class ArtemoxImageGenerator(ImageGeneratorStrategy):
     def get_name(self) -> str:
         return "Artemox (Imagen/Gemini Image)"
     
-    async def generate(self, prompt: str, style: Optional[str] = None, size: Optional[str] = None) -> bytes:
+    async def generate(self, prompt: str, style: Optional[str] = None, size: Optional[str] = None, image: Optional[str] = None) -> bytes:
         """Генерировать изображение через Artemox API"""
         
         # Применяем стиль к промпту
@@ -83,6 +83,9 @@ class ArtemoxImageGenerator(ImageGeneratorStrategy):
                         "size": image_size,
                         "response_format": "b64_json"
                     }
+
+                    if image:
+                        data["image"] = image
                     
                     response = await client.post(url, headers=headers, json=data)
                     
@@ -151,7 +154,8 @@ class ImageGenerator:
         prompt: str,
         user_id: Optional[int] = None,
         style: Optional[str] = None,
-        size: Optional[str] = None
+        size: Optional[str] = None,
+        image: Optional[str] = None
     ) -> Tuple[bytes, str]:
         """
         Генерировать изображение, пробуя разные стратегии
@@ -164,7 +168,7 @@ class ImageGenerator:
         for strategy in self.strategies:
             try:
                 logger.info(f"Попытка генерации через {strategy.get_name()}")
-                image_bytes = await strategy.generate(prompt, style, size)
+                image_bytes = await strategy.generate(prompt, style, size, image)
                 
                 # Обновляем статистику
                 if user_id:
@@ -193,7 +197,7 @@ async def get_queue_position() -> int:
         return _active_generations + 1
 
 
-async def generate_with_queue(prompt: str, user_id: int, style: Optional[str] = None, size: Optional[str] = None) -> Tuple[bytes, str]:
+async def generate_with_queue(prompt: str, user_id: int, style: Optional[str] = None, size: Optional[str] = None, image: Optional[str] = None) -> Tuple[bytes, str]:
     """
     Генерация с отображением позиции в очереди.
     """
@@ -203,7 +207,7 @@ async def generate_with_queue(prompt: str, user_id: int, style: Optional[str] = 
         position = _active_generations
 
     try:
-        return await image_generator.generate(prompt, user_id, style, size)
+        return await image_generator.generate(prompt, user_id, style, size, image)
     finally:
         async with _gen_lock:
             _active_generations = max(0, _active_generations - 1)
