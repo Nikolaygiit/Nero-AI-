@@ -3,6 +3,8 @@
 Пользователь отправляет PDF — бот извлекает текст, чанкует, строит эмбеддинги и сохраняет в ChromaDB.
 """
 import logging
+import os
+import tempfile
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -51,11 +53,18 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     status_msg = await update.message.reply_text("📄 Читаю PDF и добавляю в базу знаний...")
+    temp_path = None
     try:
         file = await context.bot.get_file(doc.file_id)
-        pdf_bytes = await file.download_as_bytearray()
-        pdf_bytes = bytes(pdf_bytes)
-        ok, message = await add_pdf_document(user_id, pdf_bytes, doc.file_name or "document.pdf")
+
+        # Create a temp file to download to
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+            temp_path = tmp_file.name
+
+        # Download to disk (streams, avoids loading into RAM)
+        await file.download_to_drive(custom_path=temp_path)
+
+        ok, message = await add_pdf_document(user_id, temp_path, doc.file_name or "document.pdf")
         await status_msg.edit_text(message, parse_mode=None)
     except Exception as e:
         logger.exception("RAG document processing failed: %s", e)
@@ -64,6 +73,12 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Убедитесь, что файл — это текстный PDF (не скан без OCR).",
             parse_mode=None,
         )
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception as e:
+                logger.warning(f"Failed to remove temp file {temp_path}: {e}")
 
 
 async def rag_docs_command(update: Update, context: ContextTypes.DEFAULT_TYPE):

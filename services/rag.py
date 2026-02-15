@@ -11,8 +11,6 @@ from typing import List, Optional
 
 import httpx
 from pypdf import PdfReader
-from io import BytesIO
-
 import config
 
 logger = logging.getLogger(__name__)
@@ -107,27 +105,31 @@ def _chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OV
     return chunks
 
 
-def _pdf_to_text(pdf_bytes: bytes) -> str:
+def _pdf_to_text(pdf_path: str) -> str:
     """Извлечь текст из PDF."""
-    reader = PdfReader(BytesIO(pdf_bytes))
-    parts = []
-    for page in reader.pages:
-        try:
-            t = page.extract_text()
-            if t:
-                parts.append(t)
-        except Exception as e:
-            logger.warning("Ошибка извлечения страницы PDF: %s", e)
-    return "\n".join(parts) if parts else ""
+    try:
+        reader = PdfReader(pdf_path)
+        parts = []
+        for page in reader.pages:
+            try:
+                t = page.extract_text()
+                if t:
+                    parts.append(t)
+            except Exception as e:
+                logger.warning("Ошибка извлечения страницы PDF: %s", e)
+        return "\n".join(parts) if parts else ""
+    except Exception as e:
+        logger.error(f"Failed to read PDF file at {pdf_path}: {e}")
+        return ""
 
 
-async def add_pdf_document(user_id: int, pdf_bytes: bytes, filename: str) -> tuple[bool, str]:
+async def add_pdf_document(user_id: int, pdf_path: str, filename: str) -> tuple[bool, str]:
     """
     Добавить PDF в векторную БД для пользователя.
     Возвращает (success, message).
     """
     loop = asyncio.get_event_loop()
-    text = await loop.run_in_executor(None, _pdf_to_text, pdf_bytes)
+    text = await loop.run_in_executor(None, _pdf_to_text, pdf_path)
     if not text or len(text.strip()) < 50:
         return False, "В PDF мало текста или он не извлечён. Попробуйте другой файл."
 
@@ -144,7 +146,14 @@ async def add_pdf_document(user_id: int, pdf_bytes: bytes, filename: str) -> tup
     if len(embeddings) != len(chunks):
         return False, "Ошибка: число эмбеддингов не совпадает с числом чанков."
 
-    doc_id = hashlib.sha256(pdf_bytes[:8192]).hexdigest()[:16]
+    try:
+        with open(pdf_path, "rb") as f:
+            head = f.read(8192)
+    except Exception as e:
+        logger.error(f"Failed to read file for hashing: {e}")
+        return False, "Ошибка чтения файла."
+
+    doc_id = hashlib.sha256(head).hexdigest()[:16]
     collection = await loop.run_in_executor(None, _get_chroma)
     user_str = str(user_id)
     ids = [f"{user_str}_{doc_id}_{i}" for i in range(len(chunks))]
