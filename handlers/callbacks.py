@@ -649,7 +649,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await safe_callback_answer(query, t("favorite_added"))
         try:
             await query.edit_message_reply_markup(reply_markup=None)
-        except:
+        except Exception:
             pass
 
     # Переанализ фото

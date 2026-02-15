@@ -182,7 +182,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # RAG: подтянуть контекст из загруженных PDF (если есть документы и запрос похож на вопрос)
     rag_context = await get_rag_context(user_id, user_message)
 
-    STREAM_EDIT_INTERVAL = 1.5  # обновлять сообщение не чаще раз в 1.5 сек (защита от лимитов Telegram)
+    stream_edit_interval = 1.5  # обновлять сообщение не чаще раз в 1.5 сек (защита от лимитов Telegram)
     try:
         status_msg = await update.message.reply_text(t("thinking"))
         accumulated = ""
@@ -197,7 +197,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 accumulated += chunk
                 now = time.monotonic()
                 # Обновляем сообщение раз в 1–2 сек, чтобы не спамить API и выглядело как стриминг
-                if len(accumulated) > 50 and (now - last_edit_at >= STREAM_EDIT_INTERVAL):
+                if len(accumulated) > 50 and (now - last_edit_at >= stream_edit_interval):
                     try:
                         safe = sanitize_markdown(accumulated)
                         await status_msg.edit_text(safe, parse_mode="Markdown")
@@ -213,7 +213,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         pass
             response = accumulated
             # Финальное обновление: если не успели обновить в последнем интервале — показываем полный текст
-            if response and (time.monotonic() - last_edit_at >= STREAM_EDIT_INTERVAL or last_edit_at == 0):
+            if response and (time.monotonic() - last_edit_at >= stream_edit_interval or last_edit_at == 0):
                 try:
                     safe = sanitize_markdown(response)
                     await status_msg.edit_text(safe, parse_mode="Markdown")
