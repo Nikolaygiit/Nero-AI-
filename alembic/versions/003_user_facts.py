@@ -7,9 +7,9 @@ Create Date: 2026-02-06
 """
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision: str = "003"
 down_revision: Union[str, None] = "8a3ca5dfd9d6"
