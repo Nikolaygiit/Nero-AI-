@@ -5,6 +5,7 @@
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
+
 import structlog
 
 LOG_FILE = "bot.log"
@@ -24,7 +25,7 @@ def setup_logging(level: int = logging.INFO) -> None:
         stream=sys.stdout,
         level=level,
     )
-    
+
     # Файловый обработчик с ротацией (JSON)
     file_handler = RotatingFileHandler(
         LOG_FILE,
@@ -33,11 +34,11 @@ def setup_logging(level: int = logging.INFO) -> None:
         encoding=ENCODING,
     )
     file_handler.setLevel(level)
-    
+
     # Консольный обработчик (читаемый формат)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(level)
-    
+
     # Настраиваем structlog с JSON для всех (файл и консоль)
     # Для консоли можно использовать structlog.dev.ConsoleRenderer, но проще оставить JSON
     # и парсить при необходимости, или использовать отдельный форматтер
@@ -57,7 +58,7 @@ def setup_logging(level: int = logging.INFO) -> None:
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
-    
+
     # Добавляем обработчики к root logger
     root_logger = logging.getLogger()
     root_logger.handlers.clear()
@@ -67,7 +68,7 @@ def setup_logging(level: int = logging.INFO) -> None:
     # Уменьшаем шум: HTTP-запросы telegram/httpx только при необходимости
     for name in ("httpx", "httpcore", "telegram"):
         logging.getLogger(name).setLevel(logging.WARNING)
-    
+
     # Для консоли используем форматтер, который преобразует JSON в читаемый вид
     class ReadableFormatter(logging.Formatter):
         """Форматтер для читаемого вывода в консоль из JSON"""
@@ -100,5 +101,5 @@ def setup_logging(level: int = logging.INFO) -> None:
                 except Exception:
                     pass
             return msg
-    
+
     console_handler.setFormatter(ReadableFormatter())
