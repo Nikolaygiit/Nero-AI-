@@ -1,7 +1,7 @@
-import sys
-import os
-from unittest.mock import AsyncMock, MagicMock, patch
 import asyncio
+import os
+import sys
+from unittest.mock import AsyncMock, MagicMock
 
 # Configure sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -62,8 +62,8 @@ sys.modules['services.rag'].get_rag_context = AsyncMock(return_value="")
 sys.modules['services.speech'] = MagicMock()
 sys.modules['config'] = MagicMock()
 
-import pytest
-from handlers.chat import handle_message
+from handlers.chat import handle_message  # noqa: E402
+
 
 async def run_chat_stream_optimization():
     """Test the streaming loop optimization in handle_message"""
@@ -106,6 +106,10 @@ async def run_chat_stream_optimization():
     # Verify final output in calls
     expected_text = "Hello world! This is a test."
 
+    # Check calls to reply_text.
+    # The handler calls reply_text("Thinking...") initially.
+    # Then it edits that message.
+    # Finally, it deletes the status message and calls reply_text again with the final response.
     calls = mock_update.message.reply_text.call_args_list
     found = False
     for call in calls:
