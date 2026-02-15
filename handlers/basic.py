@@ -2,12 +2,13 @@
 Базовые команды бота (/start, /help, /clear)
 """
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
+
 from database import db
 from services.gemini import gemini_service
 from utils.analytics import track
-import config
 
 logger = logging.getLogger(__name__)
 
@@ -28,16 +29,16 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         first_name=user_name,
         language='ru'
     )
-    
+
     # Получаем статистику
     stats = await db.get_stats(user_id)
     requests_count = stats.requests_count if stats else 0
-    
+
     # Получаем количество доступных моделей
     available_models = await gemini_service.list_available_models()
     image_models = [m for m in available_models if 'image' in m.lower() or 'imagen' in m.lower()]
     image_count = len(image_models) if image_models else 9
-    
+
     # Приветствие
     welcome_text = f"""🌟 Добро пожаловать, {user_name}!
 
@@ -65,7 +66,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 ❓ Поддержка: @nik_solt
 """
-    
+
     # Кнопки навигации
     keyboard = [
         [
@@ -85,18 +86,18 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("⚙️ Настройки", callback_data="menu_settings_new")
         ]
     ]
-    
+
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
+
     await update.message.reply_text(
         welcome_text,
-        parse_mode=None,
+        parse_mode='Markdown',
         reply_markup=reply_markup
     )
-    
+
     await db.update_stats(user_id, command='start')
     track("started_bot", str(user_id))
-    
+
     # Получаем пользователя для проверки
     user = await db.get_user(user_id)
     if not user:
@@ -136,24 +137,24 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 💡 Используйте кнопки в главном меню для быстрого доступа!
 """
-    
+
     keyboard = [[InlineKeyboardButton("🏠 Главное меню", callback_data="menu_main")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
+
     await update.message.reply_text(help_text, parse_mode='Markdown', reply_markup=reply_markup)
 
 
 async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /clear - очистка истории диалога"""
     user_id = update.effective_user.id
-    
+
     # Очищаем историю в базе данных
     await db.clear_user_messages(user_id)
-    
+
     success_msg = """
 ✅ **История очищена!**
 
 💡 Теперь бот начнет диалог с чистого листа
 """
-    
+
     await update.message.reply_text(success_msg, parse_mode='Markdown')

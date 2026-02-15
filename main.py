@@ -2,37 +2,44 @@
 Главный файл запуска бота - точка входа
 """
 import structlog
-from telegram import Update
+from telegram import BotCommand, Update
 from telegram.ext import (
     Application,
+    CallbackQueryHandler,
     CommandHandler,
     MessageHandler,
-    CallbackQueryHandler,
     PreCheckoutQueryHandler,
     filters,
-    ContextTypes,
 )
 from telegram.request import HTTPXRequest
 
 # Импорты модулей (config валидирует ключи при импорте — бот не запустится без них)
 import config
 from database import db
-from handlers.basic import start_command, help_command, clear_command
-from handlers.chat import handle_message
-from handlers.media import handle_photo, handle_voice
+from handlers.admin import broadcast_command, logs_command, users_command
+from handlers.basic import clear_command, help_command, start_command
 from handlers.callbacks import button_callback
+from handlers.chat import handle_message
 from handlers.commands import (
-    translate_command, summarize_command, explain_command,
-    quiz_command, calculator_command, wiki_command,
-    random_command, code_command, persona_command, stats_command,
-    image_command, settings_command
+    calculator_command,
+    code_command,
+    explain_command,
+    image_command,
+    persona_command,
+    quiz_command,
+    random_command,
+    settings_command,
+    stats_command,
+    summarize_command,
+    translate_command,
+    wiki_command,
 )
-from handlers.admin import broadcast_command, users_command, logs_command
-from handlers.payments import subscribe_command, pre_checkout_handler, successful_payment_handler
-from handlers.documents import handle_document, rag_docs_command, rag_clear_command
 from handlers.conversation import get_wizard_conversation_handler
-from utils.logging_config import setup_logging
+from handlers.documents import handle_document, rag_clear_command, rag_docs_command
+from handlers.media import handle_photo, handle_voice
+from handlers.payments import pre_checkout_handler, subscribe_command, successful_payment_handler
 from utils.error_middleware import global_error_handler
+from utils.logging_config import setup_logging
 
 # Логирование с ротацией файлов (5 MB, 3 резервных копии) через structlog
 setup_logging()
@@ -40,7 +47,7 @@ logger = structlog.get_logger(__name__)
 
 # Observability: Prometheus metrics (если prometheus_client установлен)
 try:
-    from utils.metrics import start_metrics_server, PROMETHEUS_AVAILABLE
+    from utils.metrics import PROMETHEUS_AVAILABLE, start_metrics_server
     if PROMETHEUS_AVAILABLE:
         _mp = getattr(config.settings, "METRICS_PORT", 9090)
         start_metrics_server(_mp)
@@ -49,10 +56,22 @@ except Exception as e:
     logger.debug("metrics_disabled", error=str(e))
 
 
-async def post_init(_application):
+async def post_init(application):
     """Вызывается после инициализации приложения (перед polling)"""
     await db.init()
     logger.info("database_initialized")
+
+    # Установка команд меню
+    commands = [
+        BotCommand("start", "🚀 Главное меню"),
+        BotCommand("help", "📚 Справка"),
+        BotCommand("image", "🎨 Создать изображение"),
+        BotCommand("persona", "👤 Выбрать персонажа"),
+        BotCommand("settings", "⚙️ Настройки"),
+        BotCommand("clear", "🗑️ Очистить историю"),
+    ]
+    await application.bot.set_my_commands(commands)
+    logger.info("bot_commands_set")
 
 
 async def post_shutdown(_application):
@@ -80,7 +99,7 @@ def main():
         .post_shutdown(post_shutdown)
         .build()
     )
-    
+
     # Регистрация обработчиков команд
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
@@ -111,15 +130,15 @@ def main():
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     application.add_handler(MessageHandler(filters.VOICE, handle_voice))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
+
     # ConversationHandler для /wizard (пошаговая настройка)
     application.add_handler(get_wizard_conversation_handler())
     # Обработчик callback кнопок
     application.add_handler(CallbackQueryHandler(button_callback))
-    
+
     # Централизованная обработка ошибок: лог в файл + пользователю "Что-то пошло не так" + админу трейсбек
     application.add_error_handler(global_error_handler)
-    
+
     # Запуск: webhooks (high load) или polling (разработка)
     use_webhooks = getattr(config.settings, "USE_WEBHOOKS", False)
     webhook_url = getattr(config.settings, "WEBHOOK_URL", "").strip()

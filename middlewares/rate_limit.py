@@ -1,12 +1,13 @@
 """
 Middleware для rate limiting
 """
+import logging
 import time
 from collections import OrderedDict
-from typing import Dict
+
 from telegram import Update
 from telegram.ext import ContextTypes
-import logging
+
 import config
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ user_requests: OrderedDict[int, list] = OrderedDict()
 
 class RateLimitMiddleware:
     """Middleware для ограничения частоты запросов"""
-    
+
     def __init__(self, max_requests: int = None, time_window: int = 60):
         """
         Args:
@@ -26,7 +27,7 @@ class RateLimitMiddleware:
         """
         self.max_requests = max_requests or config.RATE_LIMIT_PER_USER
         self.time_window = time_window
-    
+
     def _incremental_prune(self, current_time: float, prune_count: int = 10):
         """
         Удаляет неактивных пользователей из начала OrderedDict.
@@ -49,12 +50,12 @@ class RateLimitMiddleware:
     async def check_rate_limit(self, user_id: int) -> bool:
         """
         Проверяет, не превышен ли лимит запросов для пользователя
-        
+
         Returns:
             True если запрос разрешен, False если лимит превышен
         """
         current_time = time.time()
-        
+
         # Инкрементальная очистка неактивных пользователей для предотвращения утечки памяти
         self._incremental_prune(current_time)
 
@@ -66,7 +67,7 @@ class RateLimitMiddleware:
             timestamp for timestamp in timestamps
             if current_time - timestamp < self.time_window
         ]
-        
+
         # Проверяем лимит
         if len(active_timestamps) >= self.max_requests:
             logger.warning(f"Rate limit превышен для пользователя {user_id}")
@@ -74,18 +75,18 @@ class RateLimitMiddleware:
             user_requests[user_id] = active_timestamps
             user_requests.move_to_end(user_id)
             return False
-        
+
         # Добавляем текущий запрос
         active_timestamps.append(current_time)
         user_requests[user_id] = active_timestamps
         # Перемещаем пользователя в конец OrderedDict (самый свежий)
         user_requests.move_to_end(user_id)
         return True
-    
+
     async def __call__(self, update: Update, context: ContextTypes.DEFAULT_TYPE, next_handler):
         """Вызывается перед обработчиком"""
         user_id = update.effective_user.id
-        
+
         if not await self.check_rate_limit(user_id):
             # Лимит превышен
             if update.message:
@@ -100,7 +101,7 @@ class RateLimitMiddleware:
                     show_alert=True
                 )
             return
-        
+
         # Передаем управление следующему обработчику
         return await next_handler(update, context)
 
