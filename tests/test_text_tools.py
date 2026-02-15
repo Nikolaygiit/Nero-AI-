@@ -1,6 +1,7 @@
 """
 Тесты для модуля utils.text_tools
 """
+
 import sys
 import unittest
 from unittest.mock import MagicMock, patch
@@ -28,14 +29,15 @@ class TestTextTools(unittest.TestCase):
         # Используем patch.dict для временной подмены sys.modules
         with patch.dict(sys.modules, mock_modules):
             # Если модуль уже был загружен (например, с ошибками), удаляем его из кэша
-            if 'utils.text_tools' in sys.modules:
-                del sys.modules['utils.text_tools']
+            if "utils.text_tools" in sys.modules:
+                del sys.modules["utils.text_tools"]
 
             # Мы не можем безопасно удалить 'utils', так как это может сломать другие импорты,
             # но так как мы запускаем тесты изолированно или patch.dict восстанавливает состояние,
             # это должно быть безопасно.
 
             import utils.text_tools
+
             cls.text_tools = utils.text_tools
 
     def test_sanitize_markdown_balanced(self):
@@ -90,5 +92,6 @@ class TestTextTools(unittest.TestCase):
         expected = "a" * 4093 + "..."
         self.assertEqual(truncate_for_telegram(very_long_text), expected)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()
