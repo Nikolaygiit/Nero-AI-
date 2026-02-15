@@ -2,6 +2,7 @@
 Prometheus-метрики для Observability
 requests_per_minute, average_response_time, errors_count, token_usage
 """
+
 import time
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -14,6 +15,7 @@ try:
         generate_latest,
         start_http_server,
     )
+
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
