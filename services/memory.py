@@ -9,6 +9,7 @@ from typing import Dict
 
 import structlog
 
+import config
 from database import db
 from services.gemini import gemini_service
 
