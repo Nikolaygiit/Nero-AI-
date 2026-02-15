@@ -26,7 +26,9 @@ def check_auth() -> bool:
     except Exception:
         pwd = os.getenv("ADMIN_PANEL_PASSWORD", "")
     if not pwd:
-        return True
+        st.error("Ошибка безопасности: Пароль администратора не установлен. Укажите ADMIN_PANEL_PASSWORD в переменных окружения.")
+        st.stop()
+        return False
     if "admin_authenticated" not in st.session_state:
         st.session_state.admin_authenticated = False
     return st.session_state.admin_authenticated
