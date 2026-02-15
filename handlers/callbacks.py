@@ -43,28 +43,8 @@ async def show_models_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, q
         current_text_model = user.model if user else 'auto'
         current_image_model = user.image_model if user else 'auto'
         
-        # Получаем доступные модели
-        available_models = await gemini_service.list_available_models()
-        
-        # Категоризируем модели
-        text_models = {'pro': [], 'flash': []}
-        image_models = {'premium': [], 'high': [], 'medium': []}
-        
-        for model in available_models:
-            model_lower = model.lower()
-            if 'image' in model_lower or 'imagen' in model_lower:
-                if '3-pro-image' in model_lower or '4.0-ultra' in model_lower:
-                    image_models['premium'].append(model)
-                elif '4.0-generate' in model_lower and 'ultra' not in model_lower:
-                    image_models['high'].append(model)
-                elif '2.5-flash-image-preview' in model_lower:
-                    image_models['high'].append(model)
-                else:
-                    image_models['medium'].append(model)
-            elif 'pro' in model_lower and 'image' not in model_lower:
-                text_models['pro'].append(model)
-            elif 'flash' in model_lower and 'image' not in model_lower:
-                text_models['flash'].append(model)
+        # Получаем категоризированные модели (с кэшированием)
+        text_models, image_models = await gemini_service.get_categorized_models()
         
         text = f"""🤖 ВЫБОР МОДЕЛИ GEMINI
 
@@ -218,9 +198,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         requests_count = stats.requests_count if stats else 0
         
         # Получаем количество моделей
-        available_models = await gemini_service.list_available_models()
-        image_models = [m for m in available_models if 'image' in m.lower() or 'imagen' in m.lower()]
-        image_count = len(image_models) if image_models else 9
+        _, image_models_dict = await gemini_service.get_categorized_models()
+        total_image_models = sum(len(v) for v in image_models_dict.values())
+        image_count = total_image_models if total_image_models > 0 else 9
         
         menu_text = f"""🌟 Добро пожаловать, {user_name}!
 

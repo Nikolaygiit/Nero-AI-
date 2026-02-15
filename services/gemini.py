@@ -23,6 +23,8 @@ class GeminiService:
         self.api_key = api_key or config.GEMINI_API_KEY
         self.api_base = api_base or config.GEMINI_API_BASE
         self.client = None
+        self._categorized_models_cache = None
+        self._last_models_ref = None
     
     async def __aenter__(self):
         """Асинхронный контекстный менеджер - вход"""
@@ -64,6 +66,41 @@ class GeminiService:
             logger.error(f"Ошибка получения списка моделей: {e}")
             # Возвращаем модели по умолчанию
             return config.PREFERRED_MODELS[:5]
+
+    async def get_categorized_models(self) -> tuple[dict, dict]:
+        """
+        Получить категоризированные модели с кэшированием.
+        Возвращает (text_models, image_models).
+        """
+        models = await self.list_available_models()
+
+        # Если список моделей тот же самый объект, возвращаем кэш
+        if self._categorized_models_cache and self._last_models_ref is models:
+            return self._categorized_models_cache
+
+        # Категоризируем модели
+        text_models = {'pro': [], 'flash': []}
+        image_models = {'premium': [], 'high': [], 'medium': []}
+
+        for model in models:
+            model_lower = model.lower()
+            if 'image' in model_lower or 'imagen' in model_lower:
+                if '3-pro-image' in model_lower or '4.0-ultra' in model_lower:
+                    image_models['premium'].append(model)
+                elif '4.0-generate' in model_lower and 'ultra' not in model_lower:
+                    image_models['high'].append(model)
+                elif '2.5-flash-image-preview' in model_lower:
+                    image_models['high'].append(model)
+                else:
+                    image_models['medium'].append(model)
+            elif 'pro' in model_lower and 'image' not in model_lower:
+                text_models['pro'].append(model)
+            elif 'flash' in model_lower and 'image' not in model_lower:
+                text_models['flash'].append(model)
+
+        self._categorized_models_cache = (text_models, image_models)
+        self._last_models_ref = models
+        return text_models, image_models
     
     async def generate_content(
         self,
