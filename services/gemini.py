@@ -1,6 +1,7 @@
 """
 Асинхронный сервис для работы с Gemini API через Artemox
 """
+
 import json
 import logging
 from typing import AsyncGenerator, List, Optional
@@ -29,7 +30,7 @@ class GeminiService:
         """Асинхронный контекстный менеджер - вход"""
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(60.0, connect=30.0),
-            limits=httpx.Limits(max_keepalive_connections=10, max_connections=20)
+            limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
         )
         return self
 
@@ -46,10 +47,7 @@ class GeminiService:
             return available_models_cache
 
         url = f"{self.api_base}/models"
-        headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json'
-        }
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -57,7 +55,7 @@ class GeminiService:
                 response.raise_for_status()
 
                 data = response.json()
-                models = [model['id'] for model in data.get('data', [])]
+                models = [model["id"] for model in data.get("data", [])]
                 available_models_cache = models
                 logger.info(f"Найдено {len(models)} доступных моделей")
                 return models
@@ -93,24 +91,24 @@ class GeminiService:
 
         # Получаем контекст и настройки
         context_messages = []
-        persona_prompt = config.PERSONAS['assistant']['prompt']
+        persona_prompt = config.PERSONAS["assistant"]["prompt"]
 
         if user_id and use_context:
             # Получаем историю из базы данных
             messages = await db.get_user_messages(user_id, limit=10)
-            context_messages = [
-                {"role": msg.role, "content": msg.content}
-                for msg in messages
-            ]
+            context_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
 
             # Получаем настройки пользователя
             user = await db.get_user(user_id)
             if user:
-                persona_key = user.persona or 'assistant'
-                persona_prompt = config.PERSONAS.get(persona_key, config.PERSONAS['assistant'])['prompt']
+                persona_key = user.persona or "assistant"
+                persona_prompt = config.PERSONAS.get(persona_key, config.PERSONAS["assistant"])[
+                    "prompt"
+                ]
 
         # RAG Lite: добавляем факты о пользователе в контекст
         from services.memory import get_relevant_facts
+
         facts_block = await get_relevant_facts(user_id)
         facts_line = f"\n\n{facts_block}" if facts_block else ""
         # RAG: контекст из загруженных документов (PDF)
@@ -123,10 +121,7 @@ class GeminiService:
 
         # Добавляем контекст
         for msg in context_messages[-10:]:
-            messages.append({
-                "role": msg['role'],
-                "content": msg['content']
-            })
+            messages.append({"role": msg["role"], "content": msg["content"]})
 
         # Текущий запрос
         messages.append({"role": "user", "content": prompt})
@@ -139,7 +134,9 @@ class GeminiService:
             # Приоритет моделям из конфига
             for preferred in config.PREFERRED_MODELS:
                 for available in available_models:
-                    if preferred == available or (preferred in available and available not in models_to_try):
+                    if preferred == available or (
+                        preferred in available and available not in models_to_try
+                    ):
                         models_to_try.append(available)
                         break
             if not models_to_try:
@@ -150,6 +147,7 @@ class GeminiService:
         # Каскадный вызов через llm_cascade (Circuit Breaker + fallback DeepSeek/OpenAI)
         try:
             from services.llm_cascade import chat_completion
+
             text, model_used, tokens = await chat_completion(
                 messages=messages,
                 max_tokens=config.MAX_TOKENS_PER_REQUEST,
@@ -170,10 +168,7 @@ class GeminiService:
             pass  # fallback to legacy loop below
 
         url = f"{self.api_base}/chat/completions"
-        headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json'
-        }
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
         last_error = None
         timeout_sec = getattr(config, "MODEL_TIMEOUT_SEC", 10) or 10
@@ -185,17 +180,17 @@ class GeminiService:
                         "model": model_name,
                         "messages": messages,
                         "temperature": 0.7,
-                        "max_tokens": config.MAX_TOKENS_PER_REQUEST
+                        "max_tokens": config.MAX_TOKENS_PER_REQUEST,
                     }
 
                     response = await client.post(url, headers=headers, json=data)
 
                     if response.status_code == 200:
                         result = response.json()
-                        if 'choices' in result and len(result['choices']) > 0:
-                            choice = result['choices'][0]
-                            if 'message' in choice and 'content' in choice['message']:
-                                text = choice['message']['content']
+                        if "choices" in result and len(result["choices"]) > 0:
+                            choice = result["choices"][0]
+                            if "message" in choice and "content" in choice["message"]:
+                                text = choice["message"]["content"]
                                 if text and isinstance(text, str) and text.strip():
                                     current_model_name = model_name
 
@@ -205,11 +200,9 @@ class GeminiService:
                                         await db.add_message(user_id, "assistant", text.strip())
 
                                         # Обновляем статистику
-                                        tokens = result.get('usage', {}).get('total_tokens', 0)
+                                        tokens = result.get("usage", {}).get("total_tokens", 0)
                                         await db.update_stats(
-                                            user_id,
-                                            requests_count=1,
-                                            tokens_used=tokens
+                                            user_id, requests_count=1, tokens_used=tokens
                                         )
 
                                         # Получаем пользователя для проверки ID
@@ -225,13 +218,17 @@ class GeminiService:
                         continue
                     elif response.status_code == 401:
                         error_data = response.json() if response.content else {}
-                        error_msg = error_data.get('error', {}).get('message', 'Неверный API ключ')
+                        error_msg = error_data.get("error", {}).get("message", "Неверный API ключ")
                         raise Exception(f"Неверный API ключ: {error_msg[:100]}")
                     else:
                         error_data = response.json() if response.content else {}
-                        error_msg = error_data.get('error', {}).get('message', f'HTTP {response.status_code}')
+                        error_msg = error_data.get("error", {}).get(
+                            "message", f"HTTP {response.status_code}"
+                        )
                         last_error = error_msg
-                        logger.warning(f"Ошибка {response.status_code} для {model_name}: {error_msg}")
+                        logger.warning(
+                            f"Ошибка {response.status_code} для {model_name}: {error_msg}"
+                        )
                         continue
 
                 except httpx.TimeoutException:
@@ -264,29 +261,34 @@ class GeminiService:
         """
         available_models = await self.list_available_models()
         context_messages = []
-        persona_prompt = config.PERSONAS['assistant']['prompt']
+        persona_prompt = config.PERSONAS["assistant"]["prompt"]
 
         if user_id and use_context:
             messages = await db.get_user_messages(user_id, limit=10)
             context_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
             user = await db.get_user(user_id)
             if user:
-                persona_key = user.persona or 'assistant'
-                persona_prompt = config.PERSONAS.get(persona_key, config.PERSONAS['assistant'])['prompt']
+                persona_key = user.persona or "assistant"
+                persona_prompt = config.PERSONAS.get(persona_key, config.PERSONAS["assistant"])[
+                    "prompt"
+                ]
 
         from services.memory import get_relevant_facts
+
         facts_block = await get_relevant_facts(user_id) if user_id else ""
         facts_line = f"\n\n{facts_block}" if facts_block else ""
         rag_block = f"\n\n{rag_context}" if rag_context else ""
-        system_prompt = f"{persona_prompt}{facts_line}{rag_block}\n\nВажно: Отвечай на русском языке."
+        system_prompt = (
+            f"{persona_prompt}{facts_line}{rag_block}\n\nВажно: Отвечай на русском языке."
+        )
         messages = [{"role": "system", "content": system_prompt}]
         for msg in context_messages[-10:]:
-            messages.append({"role": msg['role'], "content": msg['content']})
+            messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": prompt})
 
         models_to_try = [model] if model else available_models[:5] or config.PREFERRED_MODELS[:5]
         url = f"{self.api_base}/chat/completions"
-        headers = {'Authorization': f'Bearer {self.api_key}', 'Content-Type': 'application/json'}
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
         full_text = ""
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -297,7 +299,7 @@ class GeminiService:
                         "messages": messages,
                         "temperature": 0.7,
                         "max_tokens": config.MAX_TOKENS_PER_REQUEST,
-                        "stream": True
+                        "stream": True,
                     }
                     async with client.stream("POST", url, headers=headers, json=data) as response:
                         if response.status_code != 200:
@@ -306,7 +308,11 @@ class GeminiService:
                             if line.startswith("data: ") and line != "data: [DONE]":
                                 try:
                                     chunk = json.loads(line[6:])
-                                    delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                                    delta = (
+                                        chunk.get("choices", [{}])[0]
+                                        .get("delta", {})
+                                        .get("content", "")
+                                    )
                                     if delta:
                                         full_text += delta
                                         yield delta
@@ -328,50 +334,67 @@ class GeminiService:
         prompt: str,
         image_base64: str,
         user_id: Optional[int] = None,
-        use_context: bool = True
+        use_context: bool = True,
     ) -> str:
         """
         Мультимодальный диалог: ответ на вопрос о ранее отправленном изображении.
         """
         context_messages = []
-        persona_prompt = config.PERSONAS['assistant']['prompt']
+        persona_prompt = config.PERSONAS["assistant"]["prompt"]
 
         if user_id and use_context:
             messages = await db.get_user_messages(user_id, limit=8)
             context_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
             user = await db.get_user(user_id)
             if user:
-                persona_key = user.persona or 'assistant'
-                persona_prompt = config.PERSONAS.get(persona_key, config.PERSONAS['assistant'])['prompt']
+                persona_key = user.persona or "assistant"
+                persona_prompt = config.PERSONAS.get(persona_key, config.PERSONAS["assistant"])[
+                    "prompt"
+                ]
 
         from services.memory import get_relevant_facts
+
         facts_block = await get_relevant_facts(user_id) if user_id else ""
         facts_line = f"\n\n{facts_block}" if facts_block else ""
         system_prompt = f"{persona_prompt}{facts_line}\n\nВажно: Отвечай на русском языке. Учитывай изображение в контексте."
         messages = [{"role": "system", "content": system_prompt}]
         for msg in context_messages[-8:]:
-            messages.append({"role": msg['role'], "content": msg['content']})
-        messages.append({
-            "role": "user",
-            "content": [
-                {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
-            ]
-        })
+            messages.append({"role": msg["role"], "content": msg["content"]})
+        messages.append(
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"},
+                    },
+                ],
+            }
+        )
 
         available_models = await self.list_available_models()
-        vision_models = [m for m in available_models if any(x in m.lower() for x in ['flash', 'pro', '1.5', '2.0', '2.5'])] or config.PREFERRED_MODELS[:3]
+        vision_models = [
+            m
+            for m in available_models
+            if any(x in m.lower() for x in ["flash", "pro", "1.5", "2.0", "2.5"])
+        ] or config.PREFERRED_MODELS[:3]
         url = f"{self.api_base}/chat/completions"
-        headers = {'Authorization': f'Bearer {self.api_key}', 'Content-Type': 'application/json'}
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             for model_name in vision_models[:3]:
                 try:
-                    data = {"model": model_name, "messages": messages, "temperature": 0.7, "max_tokens": config.MAX_TOKENS_PER_REQUEST}
+                    data = {
+                        "model": model_name,
+                        "messages": messages,
+                        "temperature": 0.7,
+                        "max_tokens": config.MAX_TOKENS_PER_REQUEST,
+                    }
                     response = await client.post(url, headers=headers, json=data)
                     if response.status_code == 200:
                         result = response.json()
-                        text = result.get('choices', [{}])[0].get('message', {}).get('content', '')
+                        text = result.get("choices", [{}])[0].get("message", {}).get("content", "")
                         if text and user_id:
                             await db.add_message(user_id, "user", f"[Изображение] {prompt}")
                             await db.add_message(user_id, "assistant", text.strip())
@@ -384,7 +407,7 @@ class GeminiService:
         self,
         image_base64: str,
         prompt: str = "Опиши это изображение подробно на русском языке",
-        user_id: Optional[int] = None
+        user_id: Optional[int] = None,
     ) -> str:
         """
         Анализ изображения через Gemini Vision
@@ -401,35 +424,30 @@ class GeminiService:
 
         # Ищем модели с поддержкой vision
         vision_models = [
-            m for m in available_models
-            if any(x in m.lower() for x in ['flash', 'pro', '1.5', '2.0', '2.5', '3.0'])
+            m
+            for m in available_models
+            if any(x in m.lower() for x in ["flash", "pro", "1.5", "2.0", "2.5", "3.0"])
         ]
 
         if not vision_models:
             vision_models = config.PREFERRED_MODELS[:3]
 
         url = f"{self.api_base}/chat/completions"
-        headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json'
-        }
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
         # Формируем сообщение с изображением
-        messages = [{
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": prompt
-                },
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/jpeg;base64,{image_base64}"
-                    }
-                }
-            ]
-        }]
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"},
+                    },
+                ],
+            }
+        ]
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             for model_name in vision_models[:3]:  # Пробуем первые 3 модели
@@ -438,15 +456,15 @@ class GeminiService:
                         "model": model_name,
                         "messages": messages,
                         "temperature": 0.7,
-                        "max_tokens": config.MAX_TOKENS_PER_REQUEST
+                        "max_tokens": config.MAX_TOKENS_PER_REQUEST,
                     }
 
                     response = await client.post(url, headers=headers, json=data)
 
                     if response.status_code == 200:
                         result = response.json()
-                        if 'choices' in result and len(result['choices']) > 0:
-                            text = result['choices'][0]['message']['content']
+                        if "choices" in result and len(result["choices"]) > 0:
+                            text = result["choices"][0]["message"]["content"]
                             if text and isinstance(text, str) and text.strip():
                                 # Сохраняем в базу данных
                                 if user_id:
