@@ -1,6 +1,7 @@
 """
 Админ-панель: /broadcast, /users, /logs
 """
+import asyncio
 import logging
 from pathlib import Path
 from telegram import Update
@@ -34,22 +35,29 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         telegram_ids = await db.get_all_telegram_ids()
-        success = 0
-        failed = 0
 
         status_msg = await update.message.reply_text(f"📤 Рассылка {len(telegram_ids)} пользователям...")
 
-        for tg_id in telegram_ids:
-            try:
-                await context.bot.send_message(
-                    chat_id=tg_id,
-                    text=f"📢 **Объявление:**\n\n{text}",
-                    parse_mode=ParseMode.MARKDOWN
-                )
-                success += 1
-            except Exception as e:
-                failed += 1
-                logger.warning(f"Broadcast failed for {tg_id}: {e}")
+        # Limit concurrency to avoid hitting Telegram API limits too hard
+        semaphore = asyncio.Semaphore(20)
+
+        async def send_to_user(tg_id: int):
+            async with semaphore:
+                try:
+                    await context.bot.send_message(
+                        chat_id=tg_id,
+                        text=f"📢 **Объявление:**\n\n{text}",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    return True
+                except Exception as e:
+                    logger.warning(f"Broadcast failed for {tg_id}: {e}")
+                    return False
+
+        results = await asyncio.gather(*(send_to_user(tg_id) for tg_id in telegram_ids))
+
+        success = sum(1 for r in results if r)
+        failed = sum(1 for r in results if not r)
 
         await status_msg.edit_text(
             f"✅ Рассылка завершена!\n\n"
