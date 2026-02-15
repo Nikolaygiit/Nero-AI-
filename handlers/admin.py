@@ -1,6 +1,7 @@
 """
 Админ-панель: /broadcast, /users, /logs
 """
+
 import asyncio
 import logging
 from pathlib import Path
@@ -38,7 +39,9 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         telegram_ids = await db.get_all_telegram_ids()
 
-        status_msg = await update.message.reply_text(f"📤 Рассылка {len(telegram_ids)} пользователям...")
+        status_msg = await update.message.reply_text(
+            f"📤 Рассылка {len(telegram_ids)} пользователям..."
+        )
 
         # Limit concurrency to avoid hitting Telegram API limits too hard
         semaphore = asyncio.Semaphore(20)
@@ -49,7 +52,7 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await context.bot.send_message(
                         chat_id=tg_id,
                         text=f"📢 **Объявление:**\n\n{text}",
-                        parse_mode=ParseMode.MARKDOWN
+                        parse_mode=ParseMode.MARKDOWN,
                     )
                     return True
                 except Exception as e:
@@ -62,9 +65,7 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         failed = sum(1 for r in results if not r)
 
         await status_msg.edit_text(
-            f"✅ Рассылка завершена!\n\n"
-            f"Доставлено: {success}\n"
-            f"Не доставлено: {failed}"
+            f"✅ Рассылка завершена!\n\nДоставлено: {success}\nНе доставлено: {failed}"
         )
     except Exception as e:
         logger.error(f"Broadcast error: {e}")
@@ -81,9 +82,8 @@ async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         count = await db.get_users_count()
         await update.message.reply_text(
-            f"👥 **Статистика бота:**\n\n"
-            f"Всего пользователей: {count}",
-            parse_mode=ParseMode.MARKDOWN
+            f"👥 **Статистика бота:**\n\nВсего пользователей: {count}",
+            parse_mode=ParseMode.MARKDOWN,
         )
     except Exception as e:
         logger.error(f"Users command error: {e}")
@@ -115,9 +115,7 @@ async def logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         with open(temp_log, "rb") as f:
             await update.message.reply_document(
-                document=f,
-                filename="bot_logs.txt",
-                caption="📋 Последние логи бота"
+                document=f, filename="bot_logs.txt", caption="📋 Последние логи бота"
             )
         temp_log.unlink(missing_ok=True)
     except Exception as e:

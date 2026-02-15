@@ -1,6 +1,7 @@
 """
 Обработчик текстовых сообщений
 """
+
 import re
 import time
 import uuid
@@ -32,7 +33,9 @@ from utils.text_tools import sanitize_markdown
 logger = structlog.get_logger(__name__)
 
 
-async def generate_and_reply_text(chat, user_id: int, prompt: str, context, rag_context: str = None) -> str:
+async def generate_and_reply_text(
+    chat, user_id: int, prompt: str, context, rag_context: str = None
+) -> str:
     """Генерация ответа (стриминг) — возвращает полный текст. Используется в handle_message и retry."""
     accumulated = ""
     try:
@@ -62,8 +65,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Проверка rate limit
     if not await rate_limit_middleware.check_rate_limit(user_id):
         await update.message.reply_text(
-            t("rate_limit") + f" {rate_limit_middleware.time_window} сек.\n💡 Лимит: {rate_limit_middleware.max_requests} запросов в минуту",
-            parse_mode=None
+            t("rate_limit")
+            + f" {rate_limit_middleware.time_window} сек.\n💡 Лимит: {rate_limit_middleware.max_requests} запросов в минуту",
+            parse_mode=None,
         )
         return
 
@@ -74,14 +78,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Проверка на запрос изображения
-    image_keywords = ['картинк', 'изображен', 'создай', 'скинь', 'покажи', 'нарисуй', 'сгенерируй']
+    image_keywords = ["картинк", "изображен", "создай", "скинь", "покажи", "нарисуй", "сгенерируй"]
     wants_image = any(keyword in user_message.lower() for keyword in image_keywords)
 
     if wants_image:
         # Генерация изображения
         prompt = user_message
         for keyword in image_keywords:
-            prompt = prompt.replace(keyword, '').strip()
+            prompt = prompt.replace(keyword, "").strip()
         if not prompt:
             prompt = "красивое изображение"
 
@@ -100,7 +104,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 position = queue_len + 1
                 if position > 1:
-                    await update.message.reply_text(t("image_taken_queue", position=position), parse_mode=None)
+                    await update.message.reply_text(
+                        t("image_taken_queue", position=position), parse_mode=None
+                    )
                 else:
                     await update.message.reply_text(t("image_taken"), parse_mode=None)
                 return
@@ -119,16 +125,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             image_bytes, strategy_name = await generate_with_queue(prompt, user_id)
 
             from io import BytesIO
+
             photo_file = BytesIO(image_bytes)
             photo_file.name = "image.png"
 
-            caption = f"✨ Изображение готово!\n\n📝 Описание: {prompt}\n💡 Использовано: {strategy_name}"
-
-            await update.message.reply_photo(
-                photo=photo_file,
-                caption=caption,
-                parse_mode=None
+            caption = (
+                f"✨ Изображение готово!\n\n📝 Описание: {prompt}\n💡 Использовано: {strategy_name}"
             )
+
+            await update.message.reply_photo(photo=photo_file, caption=caption, parse_mode=None)
 
             try:
                 await status_msg.delete()
@@ -141,26 +146,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Мультимодальный контекст: вопрос о ранее отправленном изображении
-    last_image = context.user_data.get('last_image_base64') if context.user_data else None
+    last_image = context.user_data.get("last_image_base64") if context.user_data else None
     if last_image and len(user_message) > 5:
         await update.message.reply_chat_action("typing")
         try:
             response = await gemini_service.generate_with_image_context(
-                prompt=user_message,
-                image_base64=last_image,
-                user_id=user_id,
-                use_context=True
+                prompt=user_message, image_base64=last_image, user_id=user_id, use_context=True
             )
-            context.user_data.pop('last_image_base64', None)
+            context.user_data.pop("last_image_base64", None)
             safe_response = sanitize_markdown(response)
-            await update.message.reply_text(safe_response, parse_mode='Markdown')
+            await update.message.reply_text(safe_response, parse_mode="Markdown")
             return
         except Exception as e:
             logger.error("multimodal_response_error", user_id=user_id, error=str(e))
-            context.user_data.pop('last_image_base64', None)
+            context.user_data.pop("last_image_base64", None)
 
     # Обычная обработка текста (потоковая генерация)
-    context.user_data.pop('last_image_base64', None)
+    context.user_data.pop("last_image_base64", None)
     context.user_data["last_prompt"] = user_message
     # ID запроса для кнопки «Перегенерировать» — в callback_data передаём его, чтобы знать, какой промпт перезапускать
     request_id = uuid.uuid4().hex[:8]
@@ -182,7 +184,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # RAG: подтянуть контекст из загруженных PDF (если есть документы и запрос похож на вопрос)
     rag_context = await get_rag_context(user_id, user_message)
 
-    stream_edit_interval = 1.5  # обновлять сообщение не чаще раз в 1.5 сек (защита от лимитов Telegram)
+    stream_edit_interval = (
+        1.5  # обновлять сообщение не чаще раз в 1.5 сек (защита от лимитов Telegram)
+    )
     try:
         status_msg = await update.message.reply_text(t("thinking"))
         accumulated = ""
@@ -213,7 +217,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         pass
             response = accumulated
             # Финальное обновление: если не успели обновить в последнем интервале — показываем полный текст
-            if response and (time.monotonic() - last_edit_at >= stream_edit_interval or last_edit_at == 0):
+            if response and (
+                time.monotonic() - last_edit_at >= stream_edit_interval or last_edit_at == 0
+            ):
                 try:
                     safe = sanitize_markdown(response)
                     await status_msg.edit_text(safe, parse_mode="Markdown")
@@ -226,7 +232,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except Exception:
                     pass
         except Exception as stream_err:
-            logger.warning("stream_error", user_id=user_id, error=str(stream_err), fallback="non_stream")
+            logger.warning(
+                "stream_error", user_id=user_id, error=str(stream_err), fallback="non_stream"
+            )
             response = await generate_and_reply_text(
                 update.effective_chat, user_id, user_message, context, rag_context=rag_context
             )
@@ -236,19 +244,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
         def make_regenerate_keyboard(uid: int, req_id: str):
-            return InlineKeyboardMarkup([
+            return InlineKeyboardMarkup(
                 [
-                    InlineKeyboardButton(t("btn_favorite"), callback_data=f"fav_{uid}"),
-                    InlineKeyboardButton(t("btn_regenerate"), callback_data=f"retry_{uid}_{req_id}"),
-                ],
-                [InlineKeyboardButton(t("btn_rephrase"), callback_data=f"rephrase_{uid}")],
-            ])
+                    [
+                        InlineKeyboardButton(t("btn_favorite"), callback_data=f"fav_{uid}"),
+                        InlineKeyboardButton(
+                            t("btn_regenerate"), callback_data=f"retry_{uid}_{req_id}"
+                        ),
+                    ],
+                    [InlineKeyboardButton(t("btn_rephrase"), callback_data=f"rephrase_{uid}")],
+                ]
+            )
 
         # Разбиваем длинные сообщения на части (лимит Telegram - 4096 символов)
         if len(response) > 4096:
             parts = []
             current_part = ""
-            code_blocks = re.split(r'(```[\s\S]*?```)', response)
+            code_blocks = re.split(r"(```[\s\S]*?```)", response)
             for block in code_blocks:
                 if len(current_part) + len(block) > 4000:
                     if current_part:
@@ -260,23 +272,33 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parts.append(current_part)
 
             for i, part in enumerate(parts):
-                reply_markup = make_regenerate_keyboard(user_id, request_id) if i == len(parts) - 1 else None
+                reply_markup = (
+                    make_regenerate_keyboard(user_id, request_id) if i == len(parts) - 1 else None
+                )
                 safe_part = sanitize_markdown(part)
                 try:
-                    await update.message.reply_text(safe_part, parse_mode='Markdown', reply_markup=reply_markup)
+                    await update.message.reply_text(
+                        safe_part, parse_mode="Markdown", reply_markup=reply_markup
+                    )
                 except BadRequest as e:
                     if "parse" in str(e).lower() or "entities" in str(e).lower():
-                        await update.message.reply_text(part, parse_mode=None, reply_markup=reply_markup)
+                        await update.message.reply_text(
+                            part, parse_mode=None, reply_markup=reply_markup
+                        )
                     else:
                         raise
         else:
             reply_markup = make_regenerate_keyboard(user_id, request_id)
             safe_response = sanitize_markdown(response)
             try:
-                await update.message.reply_text(safe_response, parse_mode='Markdown', reply_markup=reply_markup)
+                await update.message.reply_text(
+                    safe_response, parse_mode="Markdown", reply_markup=reply_markup
+                )
             except BadRequest as e:
                 if "parse" in str(e).lower() or "entities" in str(e).lower():
-                    await update.message.reply_text(response, parse_mode=None, reply_markup=reply_markup)
+                    await update.message.reply_text(
+                        response, parse_mode=None, reply_markup=reply_markup
+                    )
                 else:
                     raise
 
