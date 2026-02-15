@@ -4,29 +4,30 @@
 import re
 import time
 import uuid
-import structlog
 from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
+
+import structlog
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import BadRequest
+from telegram.ext import ContextTypes
+
 from database import db
 from services.gemini import gemini_service
-from services.image_gen import image_generator, generate_with_queue, get_queue_position
+from services.image_gen import generate_with_queue, get_queue_position
 
 try:
-    from tasks.image_tasks import generate_image_task
     from tasks.broker import get_taskiq_queue_length
+    from tasks.image_tasks import generate_image_task
 except ImportError:
     generate_image_task = None
     get_taskiq_queue_length = None
 from middlewares.rate_limit import rate_limit_middleware
 from middlewares.usage_limit import check_can_make_request
-from utils.text_tools import sanitize_markdown
-from utils.analytics import track
-from utils.i18n import t
 from services.memory import extract_and_save_facts
 from services.rag import get_rag_context
-import config
+from utils.analytics import track
+from utils.i18n import t
+from utils.text_tools import sanitize_markdown
 
 logger = structlog.get_logger(__name__)
 
@@ -71,11 +72,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not can_proceed:
         await update.message.reply_text(limit_msg, parse_mode=None)
         return
-    
+
     # Проверка на запрос изображения
     image_keywords = ['картинк', 'изображен', 'создай', 'скинь', 'покажи', 'нарисуй', 'сгенерируй']
     wants_image = any(keyword in user_message.lower() for keyword in image_keywords)
-    
+
     if wants_image:
         # Генерация изображения
         prompt = user_message
@@ -138,7 +139,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error("image_generation_error", user_id=user_id, error=str(e))
             await status_msg.edit_text(t("error_image") + f": {str(e)[:200]}")
         return
-    
+
     # Мультимодальный контекст: вопрос о ранее отправленном изображении
     last_image = context.user_data.get('last_image_base64') if context.user_data else None
     if last_image and len(user_message) > 5:
@@ -181,10 +182,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # RAG: подтянуть контекст из загруженных PDF (если есть документы и запрос похож на вопрос)
     rag_context = await get_rag_context(user_id, user_message)
 
-    STREAM_EDIT_INTERVAL = 1.5  # обновлять сообщение не чаще раз в 1.5 сек (защита от лимитов Telegram)
+    stream_edit_interval = 1.5  # обновлять сообщение не чаще раз в 1.5 сек (защита от лимитов Telegram)
     try:
         status_msg = await update.message.reply_text(t("thinking"))
-        accumulated = ""
+        accumulated_chunks = []
+        accumulated_len = 0
         last_edit_at = 0.0
         try:
             async for chunk in gemini_service.generate_content_stream(
@@ -193,10 +195,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 use_context=True,
                 rag_context=rag_context,
             ):
-                accumulated += chunk
+                accumulated_chunks.append(chunk)
+                accumulated_len += len(chunk)
                 now = time.monotonic()
                 # Обновляем сообщение раз в 1–2 сек, чтобы не спамить API и выглядело как стриминг
-                if len(accumulated) > 50 and (now - last_edit_at >= STREAM_EDIT_INTERVAL):
+                if accumulated_len > 50 and (now - last_edit_at >= stream_edit_interval):
+                    accumulated = "".join(accumulated_chunks)
                     try:
                         safe = sanitize_markdown(accumulated)
                         await status_msg.edit_text(safe, parse_mode="Markdown")
@@ -210,9 +214,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         last_edit_at = now
                     except Exception:
                         pass
-            response = accumulated
+            response = "".join(accumulated_chunks)
             # Финальное обновление: если не успели обновить в последнем интервале — показываем полный текст
-            if response and (time.monotonic() - last_edit_at >= STREAM_EDIT_INTERVAL or last_edit_at == 0):
+            if response and (time.monotonic() - last_edit_at >= stream_edit_interval or last_edit_at == 0):
                 try:
                     safe = sanitize_markdown(response)
                     await status_msg.edit_text(safe, parse_mode="Markdown")
@@ -278,7 +282,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text(response, parse_mode=None, reply_markup=reply_markup)
                 else:
                     raise
-            
+
     except Exception as e:
         logger.error("message_processing_error", user_id=user_id, error=str(e))
         await update.message.reply_text(t("error_generic") + f": {str(e)[:200]}", parse_mode=None)

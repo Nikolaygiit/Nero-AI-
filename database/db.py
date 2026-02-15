@@ -1,18 +1,29 @@
 """
 Работа с базой данных SQLite через aiosqlite
 """
-import json
-from typing import Optional, List, Dict, Any
+import logging
 from datetime import datetime
-from sqlalchemy import select, delete, func
+from typing import Any, List, Optional
+
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import (
-    create_async_engine,
+    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
-    AsyncEngine,
+    create_async_engine,
 )
-from .models import Base, User, Message, Stats, Favorite, Achievement, UserFact, Subscription, UsageDaily
-import logging
+
+from .models import (
+    Achievement,
+    Base,
+    Favorite,
+    Message,
+    Stats,
+    Subscription,
+    UsageDaily,
+    User,
+    UserFact,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,28 +49,28 @@ class Database:
             f'sqlite+aiosqlite:///{self.db_path}',
             echo=False
         )
-        
+
         # Создаем таблицы
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        
+
         # Создаем фабрику сессий
         self.async_session = async_sessionmaker(
             self.engine,
             class_=AsyncSession,
             expire_on_commit=False
         )
-        
+
         logger.info(f"База данных инициализирована: {self.db_path}")
-    
+
     async def close(self) -> None:
         """Закрытие соединения с базой данных"""
         if self.engine:
             await self.engine.dispose()
             logger.info("Соединение с базой данных закрыто")
-    
+
     # ========== Работа с пользователями ==========
-    
+
     async def get_user(self, telegram_id: int) -> Optional[User]:
         """Получить пользователя по telegram_id"""
         async with self.async_session() as session:
@@ -79,7 +90,7 @@ class Database:
         async with self.async_session() as session:
             result = await session.execute(select(func.count(User.id)))
             return result.scalar() or 0
-    
+
     async def create_or_update_user(
         self,
         telegram_id: int,
@@ -111,13 +122,13 @@ class Database:
                     **kwargs
                 )
                 session.add(user)
-            
+
             await session.commit()
             await session.refresh(user)
             return user
-    
+
     # ========== Работа с сообщениями ==========
-    
+
     async def add_message(self, user_id: int, role: str, content: str) -> None:
         """Добавить сообщение в историю"""
         async with self.async_session() as session:
@@ -128,7 +139,7 @@ class Database:
             )
             session.add(message)
             await session.commit()
-    
+
     async def get_user_messages(
         self,
         user_id: int,
@@ -144,7 +155,7 @@ class Database:
             )
             messages = result.scalars().all()
             return list(reversed(messages))  # Возвращаем в хронологическом порядке
-    
+
     async def clear_user_messages(self, user_id: int) -> None:
         """Очистить историю сообщений пользователя"""
         async with self.async_session() as session:
@@ -152,9 +163,9 @@ class Database:
                 delete(Message).where(Message.user_id == user_id)
             )
             await session.commit()
-    
+
     # ========== Работа со статистикой ==========
-    
+
     async def get_stats(self, user_id: int) -> Optional[Stats]:
         """Получить статистику пользователя"""
         async with self.async_session() as session:
@@ -162,7 +173,7 @@ class Database:
                 select(Stats).where(Stats.user_id == user_id)
             )
             return result.scalar_one_or_none()
-    
+
     async def update_stats(
         self,
         user_id: int,
@@ -178,12 +189,12 @@ class Database:
                 select(Stats).where(Stats.user_id == user_id)
             )
             stats = result.scalar_one_or_none()
-            
+
             if not stats:
                 stats = Stats(user_id=user_id)
                 session.add(stats)
                 await session.flush()  # Получаем ID для нового объекта
-            
+
             if requests_count is not None:
                 stats.requests_count += requests_count
             if tokens_used is not None:
@@ -194,12 +205,12 @@ class Database:
                 commands = stats.commands_used or {}
                 commands[command] = commands.get(command, 0) + 1
                 stats.commands_used = commands
-            
+
             stats.updated_at = datetime.utcnow()
             await session.commit()
-    
+
     # ========== Работа с избранным ==========
-    
+
     async def add_favorite(
         self,
         user_id: int,
@@ -219,7 +230,7 @@ class Database:
             await session.commit()
             await session.refresh(favorite)
             return favorite
-    
+
     async def get_user_favorites(
         self,
         user_id: int,
@@ -234,9 +245,9 @@ class Database:
                 .limit(limit)
             )
             return list(result.scalars().all())
-    
+
     # ========== Работа с достижениями ==========
-    
+
     async def add_achievement(self, user_id: int, achievement_id: str) -> None:
         """Добавить достижение пользователю"""
         async with self.async_session() as session:
@@ -249,14 +260,14 @@ class Database:
             )
             if result.scalar_one_or_none():
                 return  # Достижение уже есть
-            
+
             achievement = Achievement(
                 user_id=user_id,
                 achievement_id=achievement_id
             )
             session.add(achievement)
             await session.commit()
-    
+
     async def get_user_achievements(self, user_id: int) -> List[str]:
         """Получить список достижений пользователя"""
         async with self.async_session() as session:
