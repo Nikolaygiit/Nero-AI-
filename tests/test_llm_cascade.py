@@ -1,4 +1,3 @@
-# ruff: noqa: I001
 import sys
 import unittest
 from unittest.mock import MagicMock, patch
