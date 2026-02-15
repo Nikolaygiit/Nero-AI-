@@ -1,8 +1,6 @@
-import pytest
-import unittest.mock
-from unittest.mock import MagicMock, AsyncMock
-import sys
 import asyncio
+import sys
+from unittest.mock import AsyncMock, MagicMock
 
 # Mock dependencies to avoid import errors
 sys.modules['database'] = MagicMock()
@@ -10,7 +8,9 @@ sys.modules['config'] = MagicMock()
 sys.modules['httpx'] = MagicMock()
 
 # Now we can import the service
+# ruff: noqa: E402
 from services.gemini import GeminiService
+
 
 def test_get_categorized_models_caching():
     async def run_test():
@@ -32,7 +32,8 @@ def test_get_categorized_models_caching():
 
         assert "gemini-1.5-pro" in text_models1['pro']
         assert "gemini-1.5-flash" in text_models1['flash']
-        assert "imagen-3.0" in image_models1['medium'] # Based on logic, imagen-3.0 falls to medium unless specific keywords present
+        # Based on logic, imagen-3.0 falls to medium unless specific keywords present
+        assert "imagen-3.0" in image_models1['medium']
 
         # Check if caching attributes are set
         assert service._categorized_models_cache is not None
@@ -61,6 +62,7 @@ def test_get_categorized_models_caching():
 
     asyncio.run(run_test())
 
+
 def test_categorization_logic_correctness():
     async def run_test():
         service = GeminiService()
@@ -68,8 +70,8 @@ def test_categorization_logic_correctness():
         mock_models = [
             "gemini-3-pro-image",          # premium
             "gemini-4.0-ultra-image",      # premium
-            "imagen-4.0-generate",         # high (changed from gemini-4.0-generate to satisfy 'imagen' check)
-            "gemini-2.5-flash-image-preview", # high
+            "imagen-4.0-generate",         # high
+            "gemini-2.5-flash-image-preview",  # high
             "imagen-3.0",                  # medium
             "gemini-1.5-pro",              # text pro
             "gemini-1.5-flash",            # text flash

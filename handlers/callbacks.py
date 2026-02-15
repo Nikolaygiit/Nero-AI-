@@ -4,15 +4,16 @@
 import logging
 import uuid
 from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import BadRequest
-from database import db
-from services.gemini import gemini_service
-from services.image_gen import image_generator
-from handlers.media import handle_photo
-from utils.i18n import t
+from telegram.ext import ContextTypes
+
 import config
+from database import db
+from handlers.media import handle_photo
+from services.gemini import gemini_service
+from utils.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -33,19 +34,19 @@ async def show_models_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, q
     """Вспомогательная функция для отображения меню моделей"""
     try:
         user_id = query.from_user.id
-        
+
         # Получаем пользователя и настройки
         user = await db.get_user(user_id)
         if not user:
             await db.create_or_update_user(telegram_id=user_id)
             user = await db.get_user(user_id)
-        
+
         current_text_model = user.model if user else 'auto'
         current_image_model = user.image_model if user else 'auto'
-        
+
         # Получаем категоризированные модели (с кэшированием)
         text_models, image_models = await gemini_service.get_categorized_models()
-        
+
         text = f"""🤖 ВЫБОР МОДЕЛИ GEMINI
 
 ✅ Текущая текстовая модель: {current_text_model if current_text_model != 'auto' else 'Автоматический выбор'}
@@ -56,13 +57,13 @@ async def show_models_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, q
 💬 ТЕКСТОВЫЕ МОДЕЛИ GEMINI
 
 """
-        
+
         keyboard = []
-        
+
         # Добавляем кнопки для текстовых моделей
         pro_models = text_models['pro'][:2]
         flash_models = text_models['flash'][:2]
-        
+
         if pro_models:
             pro_buttons = []
             for model in pro_models:
@@ -73,7 +74,7 @@ async def show_models_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, q
                     pro_buttons.append(InlineKeyboardButton(f"🔥 {model_short[:18]}", callback_data=f"set_text_model_{model}"))
             if pro_buttons:
                 keyboard.append(pro_buttons[:2] if len(pro_buttons) >= 2 else pro_buttons)
-        
+
         if flash_models:
             flash_buttons = []
             for model in flash_models:
@@ -84,20 +85,20 @@ async def show_models_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, q
                     flash_buttons.append(InlineKeyboardButton(f"⚡ {model_short[:18]}", callback_data=f"set_text_model_{model}"))
             if flash_buttons:
                 keyboard.append(flash_buttons[:2] if len(flash_buttons) >= 2 else flash_buttons)
-        
+
         # Кнопка автоматического выбора для текста
         if current_text_model == 'auto':
             keyboard.append([InlineKeyboardButton("✅ Автоматический выбор (текст)", callback_data="set_text_model_auto")])
         else:
             keyboard.append([InlineKeyboardButton("🔄 Автоматический выбор (текст)", callback_data="set_text_model_auto")])
-        
+
         text += "\n🎨 МОДЕЛИ ДЛЯ ИЗОБРАЖЕНИЙ GEMINI\n\n"
-        
+
         # Добавляем кнопки для моделей изображений
         premium_models = image_models['premium'][:2]
         high_models = image_models['high'][:2]
         medium_models = image_models['medium'][:2]
-        
+
         if premium_models:
             premium_buttons = []
             for model in premium_models:
@@ -108,7 +109,7 @@ async def show_models_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, q
                     premium_buttons.append(InlineKeyboardButton(f"🔴 {model_short[:18]}", callback_data=f"set_image_model_{model}"))
             if premium_buttons:
                 keyboard.append(premium_buttons[:2] if len(premium_buttons) >= 2 else premium_buttons)
-        
+
         if high_models:
             high_buttons = []
             for model in high_models:
@@ -119,7 +120,7 @@ async def show_models_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, q
                     high_buttons.append(InlineKeyboardButton(f"🟠 {model_short[:18]}", callback_data=f"set_image_model_{model}"))
             if high_buttons:
                 keyboard.append(high_buttons[:2] if len(high_buttons) >= 2 else high_buttons)
-        
+
         if medium_models:
             medium_buttons = []
             for model in medium_models:
@@ -130,16 +131,16 @@ async def show_models_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, q
                     medium_buttons.append(InlineKeyboardButton(f"🟡 {model_short[:18]}", callback_data=f"set_image_model_{model}"))
             if medium_buttons:
                 keyboard.append(medium_buttons[:2] if len(medium_buttons) >= 2 else medium_buttons)
-        
+
         # Кнопка автоматического выбора для изображений
         if current_image_model == 'auto':
             keyboard.append([InlineKeyboardButton("✅ Автоматический выбор (изображения)", callback_data="set_image_model_auto")])
         else:
             keyboard.append([InlineKeyboardButton("🔄 Автоматический выбор (изображения)", callback_data="set_image_model_auto")])
-        
+
         keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        
+
         # Безопасное редактирование сообщения
         try:
             message = query.message
@@ -162,11 +163,11 @@ async def show_models_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, q
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка нажатий на кнопки"""
     query = update.callback_query
-    
+
     if not query:
         logger.error("button_callback вызван без callback_query")
         return
-    
+
     data = query.data
     user_id = query.from_user.id
 
@@ -175,7 +176,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     logger.debug(f"Обработка callback: {data} от пользователя {user_id}")
-    
+
     # Вспомогательная функция для безопасного редактирования сообщений
     async def safe_edit_message(text, reply_markup=None):
         try:
@@ -187,21 +188,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.warning(f"Не удалось отредактировать сообщение, отправляем новое: {e}")
             await query.message.reply_text(text, parse_mode=None, reply_markup=reply_markup)
-    
+
     # Главное меню
     if data == "menu_main":
         await safe_callback_answer(query, "🏠 Возвращаемся в главное меню...")
         user_name = query.from_user.first_name or "друг"
-        
+
         # Получаем статистику из базы данных
         stats = await db.get_stats(user_id)
         requests_count = stats.requests_count if stats else 0
-        
+
         # Получаем количество моделей
         _, image_models_dict = await gemini_service.get_categorized_models()
         total_image_models = sum(len(v) for v in image_models_dict.values())
         image_count = total_image_models if total_image_models > 0 else 9
-        
+
         menu_text = f"""🌟 Добро пожаловать, {user_name}!
 
 Рад познакомиться! Я — твой умный помощник на базе Gemini AI от Google.
@@ -228,7 +229,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 ❓ Поддержка: @nik_solt
 """
-        
+
         keyboard = [
             [
                 InlineKeyboardButton("💬 Чат с Gemini", callback_data="menu_chat"),
@@ -247,11 +248,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton("⚙️ Настройки", callback_data="menu_settings_new")
             ]
         ]
-        
+
         reply_markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(menu_text, reply_markup)
         return
-    
+
     # Меню чата
     elif data == "menu_chat":
         await safe_callback_answer(query, "💬 Чат с Gemini...")
@@ -281,7 +282,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(text, reply_markup)
         return
-    
+
     # Меню создания изображений
     elif data == "menu_create_image":
         await safe_callback_answer(query, "🎨 Создание изображения...")
@@ -310,13 +311,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(text, reply_markup)
         return
-    
+
     # Меню выбора моделей
     elif data == "menu_models":
         await safe_callback_answer(query, "🤖 Выбор модели...")
         await show_models_menu(update, context, query)
         return
-    
+
     # Установка текстовой модели
     elif data.startswith("set_text_model_"):
         model_key = data.replace("set_text_model_", "")
@@ -324,7 +325,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await db.create_or_update_user(telegram_id=user_id, model=model_key)
         await show_models_menu(update, context, query)
         return
-    
+
     # Установка модели изображений
     elif data.startswith("set_image_model_"):
         model_key = data.replace("set_image_model_", "")
@@ -332,14 +333,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await db.create_or_update_user(telegram_id=user_id, image_model=model_key)
         await show_models_menu(update, context, query)
         return
-    
+
     # Меню персонажей
     elif data == "menu_personas" or data == "menu_persona":
         await safe_callback_answer(query, "👤 Выбор персонажа...")
         user = await db.get_user(user_id)
         current_persona_key = user.persona if user else 'assistant'
         current_persona_name = config.PERSONAS.get(current_persona_key, {}).get('name', 'Помощник')
-        
+
         text = f"""👤 ВЫБОР ПЕРСОНАЖА
 
 Выберите стиль общения:
@@ -385,7 +386,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(text, reply_markup)
         return
-    
+
     # Установка персонажа
     elif data.startswith("set_persona_"):
         persona_key = data.replace("set_persona_", "")
@@ -393,12 +394,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             persona_info = config.PERSONAS[persona_key]
             await safe_callback_answer(query, f"✅ Установлен: {persona_info['name']}")
             await db.create_or_update_user(telegram_id=user_id, persona=persona_key)
-            
+
             # Возвращаемся в меню персонажей
             user = await db.get_user(user_id)
             current_persona_key = user.persona if user else 'assistant'
             current_persona_name = config.PERSONAS.get(current_persona_key, {}).get('name', 'Помощник')
-            
+
             text = f"""👤 ВЫБОР ПЕРСОНАЖА
 
 Выберите стиль общения:
@@ -444,7 +445,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup = InlineKeyboardMarkup(keyboard)
             await safe_edit_message(text, reply_markup)
         return
-    
+
     # Меню анализа фото
     elif data == "menu_photo_analysis":
         await safe_callback_answer(query, "📸 Анализ фото...")
@@ -466,7 +467,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(text, reply_markup)
         return
-    
+
     # Меню генерации кода
     elif data == "menu_code_gen":
         await safe_callback_answer(query, "💻 Генерация кода...")
@@ -487,17 +488,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(text, reply_markup)
         return
-    
+
     # Меню статистики
     elif data == "menu_stats":
         await safe_callback_answer(query, "📊 Загружаю статистику...")
         stats = await db.get_stats(user_id)
-        
+
         if stats:
             days_active = max((datetime.now() - stats.start_date).days, 1) if stats.start_date else 1
             avg_requests_per_day = stats.requests_count / days_active if days_active > 0 else 0
             avg_tokens_per_request = stats.tokens_used / max(stats.requests_count, 1)
-            
+
             text = f"""📊 ВАША СТАТИСТИКА
 
 📝 Запросов: {stats.requests_count}
@@ -516,17 +517,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 💡 Начните использовать бота для накопления статистики!
 """
-        
+
         keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="menu_main")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(text, reply_markup)
         return
-    
+
     # Меню настроек
     elif data == "menu_settings_new":
         await safe_callback_answer(query, "⚙️ Открываю настройки...")
         user = await db.get_user(user_id)
-        
+
         if user:
             persona_name = config.PERSONAS.get(user.persona, {}).get('name', 'Помощник')
             text = f"""⚙️ НАСТРОЙКИ БОТА
@@ -545,7 +546,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 Используйте кнопки ниже для изменения настроек.
 """
-        
+
         keyboard = [
             [
                 InlineKeyboardButton("👤 Изменить персонажа", callback_data="menu_personas"),
@@ -556,7 +557,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(text, reply_markup)
         return
-    
+
     # Перегенерировать ответ (Retry) — в callback_data: retry_{user_id} или retry_{user_id}_{request_id}
     elif data.startswith("retry_"):
         parts = data.split("_", 2)  # ["retry", user_id] или ["retry", user_id, request_id]
@@ -568,8 +569,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         await safe_callback_answer(query, "🔄 Перегенерирую...")
         from handlers.chat import generate_and_reply_text
-        from utils.text_tools import sanitize_markdown
         from services.rag import get_rag_context
+        from utils.text_tools import sanitize_markdown
         try:
             await query.message.delete()
         except Exception:
@@ -618,19 +619,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Обработка избранного
     elif data.startswith("fav_"):
         original_text = query.message.text or query.message.caption or ""
-        
+
         await db.add_favorite(
             user_id=user_id,
             content=original_text,
             content_type='image' if query.message.photo else 'text'
         )
-        
+
         await safe_callback_answer(query, t("favorite_added"))
         try:
             await query.edit_message_reply_markup(reply_markup=None)
-        except:
+        except Exception:
             pass
-    
+
     # Переанализ фото
     elif data.startswith("reanalyze_"):
         await safe_callback_answer(query, "🔄 Переанализирую фото...")
@@ -642,13 +643,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         self.message = message
                         self.effective_user = message.from_user
                         self.effective_chat = message.chat
-                
+
                 temp_update = TempUpdate(query.message)
                 await handle_photo(temp_update, context)
             except Exception as e:
                 logger.error(f"Ошибка переанализа фото: {e}")
                 await safe_callback_answer(query, f"❌ Ошибка переанализа: {str(e)[:100]}", show_alert=True)
-    
+
     # Остальные обработчики (regenerate, rephrase и т.д.) можно добавить позже
     else:
         logger.warning(f"Неизвестный callback: {data}")
