@@ -1,8 +1,10 @@
 """
 Telegram Stars — оплата и подписка
 """
+
 import logging
-from telegram import Update, LabeledPrice
+
+from telegram import LabeledPrice, Update
 from telegram.ext import ContextTypes
 
 from database import db
