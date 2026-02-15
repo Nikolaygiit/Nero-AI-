@@ -4,6 +4,7 @@ Taskiq worker — запуск: python -m tasks.worker
 """
 import subprocess
 import sys
+
 import structlog
 
 logger = structlog.get_logger(__name__)
