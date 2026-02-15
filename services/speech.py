@@ -1,6 +1,7 @@
 """
 Speech: Whisper (STT) и TTS через Artemox/Gemini
 """
+
 import logging
 from typing import Optional
 

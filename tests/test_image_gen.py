@@ -1,77 +1,83 @@
 import asyncio
-import sys
-from unittest.mock import AsyncMock, MagicMock
-
-# --- Mocking external dependencies BEFORE import ---
-sys.modules['httpx'] = MagicMock()
-sys.modules['sqlalchemy'] = MagicMock()
-sys.modules['sqlalchemy.ext.asyncio'] = MagicMock()
-sys.modules['pydantic'] = MagicMock()
-sys.modules['pydantic_settings'] = MagicMock()
-sys.modules['structlog'] = MagicMock()
-sys.modules['telegram'] = MagicMock()
-sys.modules['telegram.ext'] = MagicMock()
-sys.modules['telegram.error'] = MagicMock()
-
-# Mock config
-mock_config = MagicMock()
-mock_config.GEMINI_API_KEY = "test_key"
-mock_config.GEMINI_API_BASE = "http://test.api"
-# Need to mock constants used in image_gen.py
-mock_config.IMAGE_STYLES = {}
-mock_config.IMAGE_SIZES = {}
-sys.modules['config'] = mock_config
-
-# Mock database
-mock_db = MagicMock()
-mock_db.update_stats = AsyncMock()
-# Since database module usually exposes 'db' object
-mock_db_module = MagicMock()
-mock_db_module.db = mock_db
-sys.modules['database'] = mock_db_module
-
-# --- End of Mocks ---
-
 import base64
+from unittest.mock import AsyncMock, MagicMock, patch
+import pytest
 
-# Now import the class to test
-# This should now work because deps are mocked
-from services.image_gen import ArtemoxImageGenerator
+# Use unittest.mock.patch.dict to mock sys.modules safely
+# This avoids polluting global state for other tests
 
 
-def test_artemox_generate_with_image():
+@pytest.fixture
+def mock_dependencies():
+    """Mocks external dependencies for the duration of the test"""
+    with patch.dict(
+        "sys.modules",
+        {
+            "httpx": MagicMock(),
+            "sqlalchemy": MagicMock(),
+            "sqlalchemy.ext.asyncio": MagicMock(),
+            "pydantic": MagicMock(),
+            "pydantic_settings": MagicMock(),
+            "structlog": MagicMock(),
+            "telegram": MagicMock(),
+            "telegram.ext": MagicMock(),
+            "telegram.error": MagicMock(),
+            "config": MagicMock(),
+            "database": MagicMock(),
+        },
+    ):
+        # Set up specific mocks
+        sys_modules = sys.modules
+
+        # Config
+        mock_config = sys_modules["config"]
+        mock_config.GEMINI_API_KEY = "test_key"
+        mock_config.GEMINI_API_BASE = "http://test.api"
+        mock_config.IMAGE_STYLES = {}
+        mock_config.IMAGE_SIZES = {}
+
+        # Database
+        mock_db = MagicMock()
+        mock_db.update_stats = AsyncMock()
+        sys_modules["database"].db = mock_db
+
+        yield sys_modules
+
+
+def test_artemox_generate_with_image(mock_dependencies):
     """Тест генерации изображения с исходным изображением (img2img)"""
-    asyncio.run(_test_artemox_generate_with_image_async())
+    # Import inside the test function/context to ensure it uses mocked modules
+    # We need to reload/import here because if it was already imported, it won't pick up mocks
+    # But since we use patch.dict context manager, previous imports might persist if not carefully handled.
+    # Ideally, we should remove the module from sys.modules first if it exists.
 
-async def _test_artemox_generate_with_image_async():
-    # We need to patch httpx.AsyncClient because it is used inside the method
-    # Even though we mocked the module, we want to control the return value of AsyncClient() context manager
+    if "services.image_gen" in sys.modules:
+        del sys.modules["services.image_gen"]
 
-    # Get the mocked httpx module
-    mock_httpx = sys.modules['httpx']
+    from services.image_gen import ArtemoxImageGenerator
 
-    # Create a mock for the client instance
+    asyncio.run(_test_artemox_generate_with_image_async(mock_dependencies, ArtemoxImageGenerator))
+
+
+async def _test_artemox_generate_with_image_async(mock_modules, generator_cls):
+    mock_httpx = mock_modules["httpx"]
+
+    # Setup client mock
     mock_client_instance = AsyncMock()
-
-    # Setup context manager behavior
     mock_client_instance.__aenter__.return_value = mock_client_instance
     mock_client_instance.__aexit__.return_value = None
 
-    # Setup post method response
+    # Setup response
     mock_response = MagicMock()
     mock_response.status_code = 200
     fake_image_bytes = b"fake_image_data"
-    fake_b64 = base64.b64encode(fake_image_bytes).decode('utf-8')
-    mock_response.json.return_value = {
-        'data': [{'b64_json': fake_b64}]
-    }
+    fake_b64 = base64.b64encode(fake_image_bytes).decode("utf-8")
+    mock_response.json.return_value = {"data": [{"b64_json": fake_b64}]}
     mock_client_instance.post.return_value = mock_response
 
-    # Assign the mock client to AsyncClient constructor
     mock_httpx.AsyncClient.return_value = mock_client_instance
 
-    generator = ArtemoxImageGenerator(api_key="test_key")
-
+    generator = generator_cls(api_key="test_key")
     prompt = "test prompt"
     input_image_b64 = "input_base64_string"
 
@@ -79,28 +85,30 @@ async def _test_artemox_generate_with_image_async():
 
     assert result == fake_image_bytes
 
-    # Verify that post was called
+    # Verify call
     calls = mock_client_instance.post.call_args_list
     assert len(calls) > 0
-
-    # Check payload for 'image' field
-    found_image_in_payload = False
+    found = False
     for call in calls:
         args, kwargs = call
-        if 'json' in kwargs:
-            data = kwargs['json']
-            if data.get('image') == input_image_b64:
-                found_image_in_payload = True
-                break
+        if "json" in kwargs and kwargs["json"].get("image") == input_image_b64:
+            found = True
+            break
+    assert found
 
-    assert found_image_in_payload, "Payload should contain 'image' field with input image"
 
-def test_artemox_generate_text_to_image():
+def test_artemox_generate_text_to_image(mock_dependencies):
     """Тест генерации изображения без исходного изображения (txt2img)"""
-    asyncio.run(_test_artemox_generate_text_to_image_async())
+    if "services.image_gen" in sys.modules:
+        del sys.modules["services.image_gen"]
 
-async def _test_artemox_generate_text_to_image_async():
-    mock_httpx = sys.modules['httpx']
+    from services.image_gen import ArtemoxImageGenerator
+
+    asyncio.run(_test_artemox_generate_text_to_image_async(mock_dependencies, ArtemoxImageGenerator))
+
+
+async def _test_artemox_generate_text_to_image_async(mock_modules, generator_cls):
+    mock_httpx = mock_modules["httpx"]
     mock_client_instance = AsyncMock()
     mock_client_instance.__aenter__.return_value = mock_client_instance
     mock_client_instance.__aexit__.return_value = None
@@ -108,28 +116,23 @@ async def _test_artemox_generate_text_to_image_async():
     mock_response = MagicMock()
     mock_response.status_code = 200
     fake_image_bytes = b"fake_image_data_2"
-    fake_b64 = base64.b64encode(fake_image_bytes).decode('utf-8')
-    mock_response.json.return_value = {
-        'data': [{'b64_json': fake_b64}]
-    }
+    fake_b64 = base64.b64encode(fake_image_bytes).decode("utf-8")
+    mock_response.json.return_value = {"data": [{"b64_json": fake_b64}]}
     mock_client_instance.post.return_value = mock_response
 
     mock_httpx.AsyncClient.return_value = mock_client_instance
 
-    generator = ArtemoxImageGenerator(api_key="test_key")
-
-    prompt = "test prompt only"
-
-    result = await generator.generate(prompt=prompt)
+    generator = generator_cls(api_key="test_key")
+    result = await generator.generate(prompt="test")
 
     assert result == fake_image_bytes
 
-    # Verify payload does NOT contain 'image'
+    # Verify no image in payload
     calls = mock_client_instance.post.call_args_list
-    assert len(calls) > 0
-
     for call in calls:
         args, kwargs = call
-        if 'json' in kwargs:
-            data = kwargs['json']
-            assert 'image' not in data, "Payload should NOT contain 'image' field for txt2img"
+        if "json" in kwargs:
+            assert "image" not in kwargs["json"]
+
+
+import sys

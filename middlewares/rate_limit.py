@@ -1,6 +1,7 @@
 """
 Middleware для rate limiting
 """
+
 import logging
 import time
 from collections import defaultdict
@@ -40,8 +41,7 @@ class RateLimitMiddleware:
 
         # Очищаем старые запросы (старше time_window секунд)
         user_requests[user_id] = [
-            timestamp for timestamp in user_requests[user_id]
-            if current_time - timestamp < self.time_window
+            timestamp for timestamp in user_requests[user_id] if current_time - timestamp < self.time_window
         ]
 
         # Проверяем лимит
@@ -63,12 +63,11 @@ class RateLimitMiddleware:
                 await update.message.reply_text(
                     f"⏳ Слишком много запросов. Подождите {self.time_window} секунд.\n\n"
                     f"💡 Лимит: {self.max_requests} запросов в минуту",
-                    parse_mode=None
+                    parse_mode=None,
                 )
             elif update.callback_query:
                 await update.callback_query.answer(
-                    f"⏳ Слишком много запросов. Подождите {self.time_window} секунд.",
-                    show_alert=True
+                    f"⏳ Слишком много запросов. Подождите {self.time_window} секунд.", show_alert=True
                 )
             return
 

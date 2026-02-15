@@ -1,6 +1,7 @@
 """
 Обработчики медиа (фото, голос) — Vision + Whisper
 """
+
 import base64
 import logging
 from io import BytesIO
@@ -25,8 +26,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not await rate_limit_middleware.check_rate_limit(user_id):
         await update.message.reply_text(
-            f"⏳ Слишком много запросов. Подождите {rate_limit_middleware.time_window} сек.",
-            parse_mode=None
+            f"⏳ Слишком много запросов. Подождите {rate_limit_middleware.time_window} сек.", parse_mode=None
         )
         return
     can_proceed, limit_msg = await check_can_make_request(user_id)
@@ -40,7 +40,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     caption = update.message.caption or "Опиши это изображение подробно на русском языке"
 
     # Проверяем, хочет ли пользователь генерацию изображения на основе фото
-    generation_keywords = ['создай', 'сгенерируй', 'нарисуй', 'сделай', 'портрет', 'аватар', 'измени', 'замени']
+    generation_keywords = ["создай", "сгенерируй", "нарисуй", "сделай", "портрет", "аватар", "измени", "замени"]
     wants_generation = any(keyword in caption.lower() for keyword in generation_keywords)
 
     if wants_generation:
@@ -49,14 +49,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             # Скачиваем изображение
             photo_bytes = await file.download_as_bytearray()
-            image_base64 = base64.b64encode(photo_bytes).decode('utf-8')
+            image_base64 = base64.b64encode(photo_bytes).decode("utf-8")
 
             # Генерируем изображение
-            image_bytes, strategy_name = await generate_with_queue(
-                prompt=caption,
-                user_id=user_id,
-                image=image_base64
-            )
+            image_bytes, strategy_name = await generate_with_queue(prompt=caption, user_id=user_id, image=image_base64)
 
             # Отправляем результат
             photo_file = BytesIO(image_bytes)
@@ -64,11 +60,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             result_caption = f"✨ Изображение готово!\n\n📝 Описание: {caption}\n💡 Использовано: {strategy_name}"
 
-            await update.message.reply_photo(
-                photo=photo_file,
-                caption=result_caption,
-                parse_mode=None
-            )
+            await update.message.reply_photo(photo=photo_file, caption=result_caption, parse_mode=None)
 
             try:
                 await status_msg.delete()
@@ -88,22 +80,18 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         photo_bytes = await file.download_as_bytearray()
 
         # Конвертируем в base64
-        image_base64 = base64.b64encode(photo_bytes).decode('utf-8')
+        image_base64 = base64.b64encode(photo_bytes).decode("utf-8")
 
         # Сохраняем в контексте для мультимодального диалога (вопросы о картинке в чате)
         if context.user_data is not None:
-            context.user_data['last_image_base64'] = image_base64
+            context.user_data["last_image_base64"] = image_base64
 
         # Анализируем через Gemini Vision
-        analysis = await gemini_service.analyze_image(
-            image_base64=image_base64,
-            prompt=caption,
-            user_id=user_id
-        )
+        analysis = await gemini_service.analyze_image(image_base64=image_base64, prompt=caption, user_id=user_id)
 
         track("analyzed_image", str(user_id))
         safe_analysis = sanitize_markdown(analysis)
-        await analysis_msg.edit_text(f"📸 **Анализ изображения:**\n\n{safe_analysis}", parse_mode='Markdown')
+        await analysis_msg.edit_text(f"📸 **Анализ изображения:**\n\n{safe_analysis}", parse_mode="Markdown")
 
     except Exception as e:
         logger.error(f"Ошибка анализа изображения: {e}")
@@ -136,6 +124,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         track("voice_transcribed", str(user_id))
         # Подставляем распознанный текст как новое сообщение — перенаправляем в handle_message
         from handlers.chat import handle_message
+
         update.message.text = text
         await handle_message(update, context)
     except Exception as e:

@@ -2,6 +2,7 @@
 Интерактивное меню — ConversationHandler (FSM)
 Пошаговые сценарии: настройки, выбор персонажа
 """
+
 import logging
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -69,6 +70,7 @@ async def wizard_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 def get_wizard_conversation_handler() -> ConversationHandler:
     """ConversationHandler для /wizard — пошаговая настройка"""
     from telegram.ext import CallbackQueryHandler, CommandHandler
+
     return ConversationHandler(
         entry_points=[CommandHandler("wizard", wizard_start)],
         states={

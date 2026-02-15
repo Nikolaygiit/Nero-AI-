@@ -2,6 +2,7 @@
 Обработка загруженных документов (PDF) для RAG.
 Пользователь отправляет PDF — бот извлекает текст, чанкует, строит эмбеддинги и сохраняет в ChromaDB.
 """
+
 import logging
 
 from telegram import Update
@@ -39,7 +40,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if doc.file_size and doc.file_size > MAX_PDF_BYTES:
         await update.message.reply_text(
-            f"⚠️ Файл слишком большой (макс. {MAX_PDF_BYTES // (1024*1024)} МБ). Отправьте меньший PDF."
+            f"⚠️ Файл слишком большой (макс. {MAX_PDF_BYTES // (1024 * 1024)} МБ). Отправьте меньший PDF."
         )
         return
 
@@ -61,8 +62,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.exception("RAG document processing failed: %s", e)
         await status_msg.edit_text(
-            f"❌ Ошибка обработки PDF: {str(e)[:300]}\n\n"
-            "Убедитесь, что файл — это текстный PDF (не скан без OCR).",
+            f"❌ Ошибка обработки PDF: {str(e)[:300]}\n\nУбедитесь, что файл — это текстный PDF (не скан без OCR).",
             parse_mode=None,
         )
 

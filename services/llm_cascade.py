@@ -3,6 +3,7 @@ Circuit Breaker + Model Cascading — неубиваемость LLM API
 Если основная модель падает или тормозит > N сек, автоматически переключаемся на резервную.
 Поддержка fallback на DeepSeek/OpenAI при наличии ключей.
 """
+
 import asyncio
 import json
 import logging
@@ -27,6 +28,7 @@ CIRCUIT_COOLDOWN_SEC = getattr(config, "CIRCUIT_COOLDOWN_SEC", 60)
 @dataclass
 class CircuitState:
     """Состояние circuit breaker для одной модели"""
+
     failures: int = 0
     last_failure_at: float = 0
     open_until: float = 0
@@ -74,6 +76,7 @@ circuit_breaker = CircuitBreaker()
 @dataclass
 class LLMProvider:
     """Провайдер LLM API (OpenAI-совместимый)"""
+
     name: str
     api_base: str
     api_key: str
@@ -86,32 +89,38 @@ def _get_providers() -> List[LLMProvider]:
     providers: List[LLMProvider] = []
 
     # 1. Artemox (Gemini) — основной
-    providers.append(LLMProvider(
-        name="artemox",
-        api_base=config.GEMINI_API_BASE,
-        api_key=config.GEMINI_API_KEY,
-        models=config.PREFERRED_MODELS[:8],
-    ))
+    providers.append(
+        LLMProvider(
+            name="artemox",
+            api_base=config.GEMINI_API_BASE,
+            api_key=config.GEMINI_API_KEY,
+            models=config.PREFERRED_MODELS[:8],
+        )
+    )
 
     # 2. DeepSeek — fallback
     deepseek_key = getattr(config.settings, "DEEPSEEK_API_KEY", "") or ""
     if deepseek_key and len(deepseek_key) > 5:
-        providers.append(LLMProvider(
-            name="deepseek",
-            api_base="https://api.deepseek.com/v1",
-            api_key=deepseek_key,
-            models=["deepseek-chat", "deepseek-coder"],
-        ))
+        providers.append(
+            LLMProvider(
+                name="deepseek",
+                api_base="https://api.deepseek.com/v1",
+                api_key=deepseek_key,
+                models=["deepseek-chat", "deepseek-coder"],
+            )
+        )
 
     # 3. OpenAI — fallback
     openai_key = getattr(config.settings, "OPENAI_API_KEY", "") or ""
     if openai_key and len(openai_key) > 5:
-        providers.append(LLMProvider(
-            name="openai",
-            api_base="https://api.openai.com/v1",
-            api_key=openai_key,
-            models=["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"],
-        ))
+        providers.append(
+            LLMProvider(
+                name="openai",
+                api_base="https://api.openai.com/v1",
+                api_key=openai_key,
+                models=["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"],
+            )
+        )
 
     return providers
 
@@ -210,8 +219,11 @@ async def chat_completion(
                 t0 = time.monotonic()
                 text, tokens, err = await asyncio.wait_for(
                     _chat_completion_request(
-                        provider, model, messages,
-                        max_tokens=max_tokens, stream=stream,
+                        provider,
+                        model,
+                        messages,
+                        max_tokens=max_tokens,
+                        stream=stream,
                     ),
                     timeout=MODEL_TIMEOUT_SEC + 2,
                 )
@@ -220,6 +232,7 @@ async def chat_completion(
                     last_error = err
                     try:
                         from utils.metrics import record_error, record_request
+
                         record_request(model_key, status="error")
                         record_error(model_key, type(err).__name__)
                     except Exception:
@@ -233,6 +246,7 @@ async def chat_completion(
                             record_response_time,
                             record_tokens,
                         )
+
                         record_request(model_key, status="success")
                         record_response_time(model_key, duration)
                         if tokens:

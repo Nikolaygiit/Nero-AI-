@@ -1,6 +1,7 @@
 """
 Сервис генерации изображений с паттерном Strategy и очередью
 """
+
 import asyncio
 import base64
 import logging
@@ -23,7 +24,9 @@ class ImageGeneratorStrategy(ABC):
     """Абстрактный класс для стратегий генерации изображений"""
 
     @abstractmethod
-    async def generate(self, prompt: str, style: Optional[str] = None, size: Optional[str] = None, image: Optional[str] = None) -> bytes:
+    async def generate(
+        self, prompt: str, style: Optional[str] = None, size: Optional[str] = None, image: Optional[str] = None
+    ) -> bytes:
         """Генерировать изображение"""
         pass
 
@@ -43,7 +46,9 @@ class ArtemoxImageGenerator(ImageGeneratorStrategy):
     def get_name(self) -> str:
         return "Artemox (Imagen/Gemini Image)"
 
-    async def generate(self, prompt: str, style: Optional[str] = None, size: Optional[str] = None, image: Optional[str] = None) -> bytes:
+    async def generate(
+        self, prompt: str, style: Optional[str] = None, size: Optional[str] = None, image: Optional[str] = None
+    ) -> bytes:
         """Генерировать изображение через Artemox API"""
 
         # Применяем стиль к промпту
@@ -51,26 +56,23 @@ class ArtemoxImageGenerator(ImageGeneratorStrategy):
             prompt = f"{prompt}, {config.IMAGE_STYLES[style].lower()} style"
 
         # Получаем размер
-        image_size = config.IMAGE_SIZES.get(size, '1024x1024') if size else '1024x1024'
+        image_size = config.IMAGE_SIZES.get(size, "1024x1024") if size else "1024x1024"
 
         # Модели для генерации изображений (приоритет по качеству)
         models_to_try = [
-            'gemini-3-pro-image-preview',
-            'imagen-4.0-ultra-generate-001',
-            'imagen-4.0-generate-001',
-            'imagen-4.0-fast-generate-001',
-            'gemini-2.5-flash-image-preview',
-            'imagen-3.0-generate-002',
-            'imagen-3.0-generate-001',
-            'imagen-3.0-fast-generate-001',
-            'gemini-2.5-flash-image',
+            "gemini-3-pro-image-preview",
+            "imagen-4.0-ultra-generate-001",
+            "imagen-4.0-generate-001",
+            "imagen-4.0-fast-generate-001",
+            "gemini-2.5-flash-image-preview",
+            "imagen-3.0-generate-002",
+            "imagen-3.0-generate-001",
+            "imagen-3.0-fast-generate-001",
+            "gemini-2.5-flash-image",
         ]
 
         url = f"{self.api_base}/images/generations"
-        headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json'
-        }
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
         last_error = None
 
@@ -83,7 +85,7 @@ class ArtemoxImageGenerator(ImageGeneratorStrategy):
                         "prompt": prompt,
                         "n": 1,
                         "size": image_size,
-                        "response_format": "b64_json"
+                        "response_format": "b64_json",
                     }
 
                     if image:
@@ -95,23 +97,23 @@ class ArtemoxImageGenerator(ImageGeneratorStrategy):
                         result = response.json()
 
                         # Проверяем разные форматы ответа
-                        if 'data' in result and len(result['data']) > 0:
-                            image_data = result['data'][0]
+                        if "data" in result and len(result["data"]) > 0:
+                            image_data = result["data"][0]
                             # Может быть 'b64_json' или 'url'
-                            if 'b64_json' in image_data:
-                                return base64.b64decode(image_data['b64_json'])
-                            elif 'url' in image_data:
+                            if "b64_json" in image_data:
+                                return base64.b64decode(image_data["b64_json"])
+                            elif "url" in image_data:
                                 # Если URL, скачиваем изображение
-                                img_response = await client.get(image_data['url'])
+                                img_response = await client.get(image_data["url"])
                                 img_response.raise_for_status()
                                 return img_response.content
 
                         # Альтернативный формат ответа
-                        if 'image' in result:
-                            if isinstance(result['image'], str):
-                                return base64.b64decode(result['image'])
-                            elif isinstance(result['image'], bytes):
-                                return result['image']
+                        if "image" in result:
+                            if isinstance(result["image"], str):
+                                return base64.b64decode(result["image"])
+                            elif isinstance(result["image"], bytes):
+                                return result["image"]
 
                     if response.status_code == 429:
                         logger.warning(f"Rate limit для {model_name}")
@@ -121,7 +123,7 @@ class ArtemoxImageGenerator(ImageGeneratorStrategy):
                         continue
                     else:
                         error_data = response.json() if response.content else {}
-                        error_msg = error_data.get('error', {}).get('message', f'HTTP {response.status_code}')
+                        error_msg = error_data.get("error", {}).get("message", f"HTTP {response.status_code}")
                         last_error = error_msg
                         logger.warning(f"Ошибка {response.status_code} для {model_name}: {error_msg}")
                         continue
@@ -157,7 +159,7 @@ class ImageGenerator:
         user_id: Optional[int] = None,
         style: Optional[str] = None,
         size: Optional[str] = None,
-        image: Optional[str] = None
+        image: Optional[str] = None,
     ) -> Tuple[bytes, str]:
         """
         Генерировать изображение, пробуя разные стратегии
@@ -199,7 +201,9 @@ async def get_queue_position() -> int:
         return _active_generations + 1
 
 
-async def generate_with_queue(prompt: str, user_id: int, style: Optional[str] = None, size: Optional[str] = None, image: Optional[str] = None) -> Tuple[bytes, str]:
+async def generate_with_queue(
+    prompt: str, user_id: int, style: Optional[str] = None, size: Optional[str] = None, image: Optional[str] = None
+) -> Tuple[bytes, str]:
     """
     Генерация с отображением позиции в очереди.
     """

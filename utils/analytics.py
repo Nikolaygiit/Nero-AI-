@@ -2,6 +2,7 @@
 Аналитика — отправка событий в PostHog/Amplitude
 События: started_bot, generated_image, sent_message и т.д.
 """
+
 import logging
 from typing import Any, Optional
 

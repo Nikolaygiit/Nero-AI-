@@ -2,6 +2,7 @@
 Наблюдатель за изменениями файлов. Каждые 5 изменений создаёт резервную копию
 в подпапки с датами: "Проект 3 (Git Копия)/2025-02-07_14-30-25/"
 """
+
 import shutil
 import time
 from datetime import datetime
@@ -20,10 +21,19 @@ DEBOUNCE_SECONDS = 2  # Изменения в течение 2 сек счита
 
 # Исключения при копировании
 IGNORE_PATTERNS = {
-    ".git", "__pycache__", "venv", "env", ".venv",
-    "bot_database.db", "bot.log", ".env",
-    "node_modules", ".idea", ".vscode", "*.pyc",
-    BACKUP_BASE_FOLDER  # Не копировать саму папку бэкапа
+    ".git",
+    "__pycache__",
+    "venv",
+    "env",
+    ".venv",
+    "bot_database.db",
+    "bot.log",
+    ".env",
+    "node_modules",
+    ".idea",
+    ".vscode",
+    "*.pyc",
+    BACKUP_BASE_FOLDER,  # Не копировать саму папку бэкапа
 }
 
 
@@ -45,9 +55,12 @@ def copy_project(src: Path, base_backup: Path):
 
     def ignore_func(directory, files):
         return [
-            f for f in files
+            f
+            for f in files
             if f in (".git", ".env", "bot_database.db", "bot.log")
-            or f == "__pycache__" or f == "venv" or f.endswith(".pyc")
+            or f == "__pycache__"
+            or f == "venv"
+            or f.endswith(".pyc")
         ]
 
     dst.mkdir(parents=True, exist_ok=True)

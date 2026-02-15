@@ -1,6 +1,7 @@
 """
 Главный файл запуска бота - точка входа
 """
+
 import structlog
 from telegram import Update
 from telegram.ext import (
@@ -48,6 +49,7 @@ logger = structlog.get_logger(__name__)
 # Observability: Prometheus metrics (если prometheus_client установлен)
 try:
     from utils.metrics import PROMETHEUS_AVAILABLE, start_metrics_server
+
     if PROMETHEUS_AVAILABLE:
         _mp = getattr(config.settings, "METRICS_PORT", 9090)
         start_metrics_server(_mp)
@@ -146,13 +148,8 @@ def main():
         )
     else:
         logger.info("bot_started", message="Бот запущен (polling), ожидает сообщения")
-        application.run_polling(
-            allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True,
-            timeout=5,
-            poll_interval=0
-        )
+        application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True, timeout=5, poll_interval=0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

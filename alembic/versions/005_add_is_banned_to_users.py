@@ -5,6 +5,7 @@ Revises: 004
 Create Date: 2026-02-07
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -20,9 +21,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def _column_exists(connection, table: str, column: str) -> bool:
     # pragma_table_info не поддерживает bound params в старых SQLite
-    result = connection.execute(text(
-        f"SELECT 1 FROM pragma_table_info('{table}') WHERE name='{column}'"
-    ))
+    result = connection.execute(text(f"SELECT 1 FROM pragma_table_info('{table}') WHERE name='{column}'"))
     return result.fetchone() is not None
 
 

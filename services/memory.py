@@ -3,6 +3,7 @@ RAG Lite — долгосрочная память: факты о пользов
 Сохраняем важные факты, подмешиваем в промпт при генерации
 Используем Gemini API для умного извлечения фактов
 """
+
 import json
 import re
 from typing import Dict
@@ -56,7 +57,7 @@ async def extract_facts_with_gemini(user_message: str) -> Dict[str, str]:
             prompt=prompt,
             user_id=None,  # без контекста пользователя
             use_context=False,
-            model=fact_model
+            model=fact_model,
         )
 
         # Очищаем ответ от markdown блоков кода, если есть
@@ -114,7 +115,9 @@ async def extract_and_save_facts(user_id: int, user_message: str) -> None:
             if len(value) > 2:
                 try:
                     await db.add_user_fact(user_id, fact_type, value)
-                    logger.debug("fact_saved", user_id=user_id, fact_type=fact_type, fact_value=value[:50], method="regex")
+                    logger.debug(
+                        "fact_saved", user_id=user_id, fact_type=fact_type, fact_value=value[:50], method="regex"
+                    )
                 except Exception as e:
                     logger.debug("fact_save_skipped", user_id=user_id, error=str(e))
 

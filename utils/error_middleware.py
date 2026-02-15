@@ -5,6 +5,7 @@
 - Отправка трейсбека админу
 - Повторные попытки при сетевых ошибках (NetworkError, ConnectError)
 """
+
 import asyncio
 import logging
 import traceback
@@ -27,7 +28,15 @@ ADMIN_MESSAGE_PREFIX = "🐛 **Ошибка бота:**\n\n"
 RETRYABLE_ERRORS: tuple = (NetworkError, ConnectionError, OSError)
 try:
     import httpx
-    RETRYABLE_ERRORS = (NetworkError, ConnectionError, OSError, httpx.RemoteProtocolError, httpx.ConnectError, httpx.ReadTimeout)
+
+    RETRYABLE_ERRORS = (
+        NetworkError,
+        ConnectionError,
+        OSError,
+        httpx.RemoteProtocolError,
+        httpx.ConnectError,
+        httpx.ReadTimeout,
+    )
 except Exception:
     pass
 
@@ -45,7 +54,7 @@ async def send_message_with_retry(bot, chat_id: int, text: str, parse_mode: str 
         except RETRYABLE_ERRORS as e:
             last_err = e
             if attempt < max_attempts - 1:
-                wait_sec = 1.5 ** attempt  # 1, 1.5, 2.25 сек
+                wait_sec = 1.5**attempt  # 1, 1.5, 2.25 сек
                 logger.debug("send_message retry attempt %s after %s: %s", attempt + 1, wait_sec, e)
                 await asyncio.sleep(wait_sec)
         except Exception as e:
@@ -58,6 +67,7 @@ async def send_message_with_retry(bot, chat_id: int, text: str, parse_mode: str 
 
 def handle_errors(handler):
     """Декоратор: перехватывает ошибки в хендлерах, логирует и уведомляет."""
+
     @wraps(handler)
     async def wrapper(update: object, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         try:
@@ -84,14 +94,13 @@ def handle_errors(handler):
                     text = f"{ADMIN_MESSAGE_PREFIX}**Текст ошибки:** `{err_text}`\n\n**Стек вызова:**\n```\n{short_tb}\n```"
                     for admin_id in config.ADMIN_IDS:
                         try:
-                            await send_message_with_retry(
-                                context.bot, admin_id, text, parse_mode="Markdown"
-                            )
+                            await send_message_with_retry(context.bot, admin_id, text, parse_mode="Markdown")
                         except Exception:
                             pass
                 except Exception as admin_err:
                     logger.warning("Не удалось отправить ошибку админу: %s", admin_err)
             raise
+
     return wrapper
 
 
@@ -122,9 +131,7 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
             text = f"{ADMIN_MESSAGE_PREFIX}**Текст ошибки:** `{err_text}`\n\n**Стек вызова:**\n```\n{short_tb}\n```"
             for admin_id in config.ADMIN_IDS:
                 try:
-                    await send_message_with_retry(
-                        context.bot, admin_id, text, parse_mode="Markdown"
-                    )
+                    await send_message_with_retry(context.bot, admin_id, text, parse_mode="Markdown")
                 except Exception:
                     pass
         except Exception as admin_err:
