@@ -5,12 +5,13 @@ Revises: 003
 Create Date: 2026-02-06
 
 """
+
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import text
 
+from alembic import op
 
 revision: str = "004"
 down_revision: Union[str, None] = "003"
@@ -19,9 +20,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def _table_exists(connection, name: str) -> bool:
-    result = connection.execute(text(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=:name"
-    ), {"name": name})
+    result = connection.execute(
+        text("SELECT name FROM sqlite_master WHERE type='table' AND name=:name"), {"name": name}
+    )
     return result.fetchone() is not None
 
 

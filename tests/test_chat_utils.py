@@ -1,46 +1,9 @@
+# ruff: noqa: E402
 import sys
 import os
 from unittest.mock import MagicMock
 
-# Mock all heavy dependencies
-sys.modules['telegram'] = MagicMock()
-sys.modules['telegram.error'] = MagicMock()
-sys.modules['telegram.ext'] = MagicMock()
-sys.modules['telegram.constants'] = MagicMock()
-
-sys.modules['sqlalchemy'] = MagicMock()
-sys.modules['database'] = MagicMock()
-sys.modules['database.db'] = MagicMock()
-sys.modules['database.models'] = MagicMock()
-
-sys.modules['structlog'] = MagicMock()
-sys.modules['httpx'] = MagicMock()  # Mock httpx
-sys.modules['pydantic'] = MagicMock()
-sys.modules['pydantic_settings'] = MagicMock()
-sys.modules['config'] = MagicMock()
-
-sys.modules['services'] = MagicMock()
-sys.modules['services.gemini'] = MagicMock()
-sys.modules['services.image_gen'] = MagicMock()
-sys.modules['services.memory'] = MagicMock()
-sys.modules['services.rag'] = MagicMock()
-
-# Mock internal sibling modules to prevent them from being imported by handlers/__init__.py
-sys.modules['handlers.basic'] = MagicMock()
-sys.modules['handlers.admin'] = MagicMock()
-sys.modules['handlers.callbacks'] = MagicMock()
-sys.modules['handlers.commands'] = MagicMock()
-sys.modules['handlers.conversation'] = MagicMock()
-sys.modules['handlers.documents'] = MagicMock()
-sys.modules['handlers.media'] = MagicMock()
-sys.modules['handlers.payments'] = MagicMock()
-
-# Mock middlewares
-sys.modules['middlewares'] = MagicMock()
-sys.modules['middlewares.rate_limit'] = MagicMock()
-sys.modules['middlewares.usage_limit'] = MagicMock()
-
-# Mock classes for telegram
+# Mock classes for telegram (since utils.chat_utils imports it)
 class MockInlineKeyboardMarkup:
     def __init__(self, inline_keyboard):
         self.inline_keyboard = inline_keyboard
@@ -49,15 +12,29 @@ class MockInlineKeyboardButton:
         self.text = text
         self.callback_data = callback_data
 
+# Mock sys.modules for telegram
+sys.modules['telegram'] = MagicMock()
 sys.modules['telegram'].InlineKeyboardMarkup = MockInlineKeyboardMarkup
 sys.modules['telegram'].InlineKeyboardButton = MockInlineKeyboardButton
 
-# Add current dir to path
-sys.path.append(os.getcwd())
+# IMPORTANT: Mock submodules like telegram.ext, telegram.error because utils/__init__.py might import them
+sys.modules['telegram.ext'] = MagicMock()
+sys.modules['telegram.error'] = MagicMock()
+sys.modules['telegram.constants'] = MagicMock()
+
+# Mock other dependencies that utils package might accidentally pull in
+sys.modules['structlog'] = MagicMock()
+
+# We don't need to mock handlers or services anymore, as utils/chat_utils is standalone
+# But if utils/__init__.py imports error_middleware which imports config or database...
+sys.modules['config'] = MagicMock()
+sys.modules['database'] = MagicMock()
 
 import pytest
-# Try to import chat_utils.
-from handlers.chat_utils import split_long_message, make_regenerate_keyboard
+# Import from the new location
+# Note: utils/__init__.py imports other stuff. We might need to mock them if they fail.
+# But let's try.
+from utils.chat_utils import split_long_message, make_regenerate_keyboard
 
 def test_split_long_message_short():
     text = "Short message"

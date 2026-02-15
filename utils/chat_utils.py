@@ -1,17 +1,23 @@
 import re
 from typing import List
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
 from utils.i18n import t
+
 
 def make_regenerate_keyboard(uid: int, req_id: str) -> InlineKeyboardMarkup:
     """Создает клавиатуру с кнопками 'В избранное', 'Перегенерировать', 'Перефразировать'."""
-    return InlineKeyboardMarkup([
+    return InlineKeyboardMarkup(
         [
-            InlineKeyboardButton(t("btn_favorite"), callback_data=f"fav_{uid}"),
-            InlineKeyboardButton(t("btn_regenerate"), callback_data=f"retry_{uid}_{req_id}"),
-        ],
-        [InlineKeyboardButton(t("btn_rephrase"), callback_data=f"rephrase_{uid}")],
-    ])
+            [
+                InlineKeyboardButton(t("btn_favorite"), callback_data=f"fav_{uid}"),
+                InlineKeyboardButton(t("btn_regenerate"), callback_data=f"retry_{uid}_{req_id}"),
+            ],
+            [InlineKeyboardButton(t("btn_rephrase"), callback_data=f"rephrase_{uid}")],
+        ]
+    )
+
 
 def split_long_message(text: str, max_length: int = 4096) -> List[str]:
     """
@@ -25,7 +31,7 @@ def split_long_message(text: str, max_length: int = 4096) -> List[str]:
     parts = []
     current_part = ""
     # Разбиваем по блокам кода
-    code_blocks = re.split(r'(```[\s\S]*?```)', text)
+    code_blocks = re.split(r"(```[\s\S]*?```)", text)
 
     for block in code_blocks:
         if not block:
@@ -44,7 +50,7 @@ def split_long_message(text: str, max_length: int = 4096) -> List[str]:
             if len(block) > max_length:
                 # Разбиваем длинный блок на куски
                 for i in range(0, len(block), max_length):
-                    parts.append(block[i:i + max_length])
+                    parts.append(block[i : i + max_length])
             else:
                 current_part = block
 

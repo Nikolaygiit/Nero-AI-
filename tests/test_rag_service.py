@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 import sys
 import os
 import unittest
@@ -35,9 +36,6 @@ if 'services.rag' in sys.modules:
 # Also delete services package if loaded, to force re-import logic if needed
 if 'services' in sys.modules:
     del sys.modules['services']
-# Wait, if I delete services package, I lose my mocks for services.gemini inside it?
-# No, sys.modules['services.gemini'] is independent key.
-# But importing services might trigger importing services.gemini.
 
 import services.rag
 

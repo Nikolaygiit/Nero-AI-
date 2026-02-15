@@ -2,16 +2,17 @@
 RAG (Retrieval-Augmented Generation): PDF → чанки → эмбеддинги → ChromaDB.
 При вопросе пользователя ищем похожие фрагменты и подставляем в контекст LLM.
 """
+
 import asyncio
 import hashlib
 import logging
 import re
+from io import BytesIO
 from pathlib import Path
 from typing import List, Optional
 
 import httpx
 from pypdf import PdfReader
-from io import BytesIO
 
 import config
 
@@ -41,7 +42,9 @@ def _get_chroma():
         raise RuntimeError("Установите chromadb: pip install chromadb")
     path = Path(config.RAG_CHROMA_PATH)
     path.mkdir(parents=True, exist_ok=True)
-    _chroma_client = chromadb.PersistentClient(path=str(path), settings=ChromaSettings(anonymized_telemetry=False))
+    _chroma_client = chromadb.PersistentClient(
+        path=str(path), settings=ChromaSettings(anonymized_telemetry=False)
+    )
     _chroma_collection = _chroma_client.get_or_create_collection(
         name="rag_docs",
         metadata={"description": "RAG chunks from user PDFs"},
@@ -148,7 +151,10 @@ async def add_pdf_document(user_id: int, pdf_bytes: bytes, filename: str) -> tup
     collection = await loop.run_in_executor(None, _get_chroma)
     user_str = str(user_id)
     ids = [f"{user_str}_{doc_id}_{i}" for i in range(len(chunks))]
-    metadatas = [{"user_id": user_str, "doc_name": filename[:200], "chunk_idx": i} for i in range(len(chunks))]
+    metadatas = [
+        {"user_id": user_str, "doc_name": filename[:200], "chunk_idx": i}
+        for i in range(len(chunks))
+    ]
 
     def _add():
         collection.add(
@@ -159,8 +165,13 @@ async def add_pdf_document(user_id: int, pdf_bytes: bytes, filename: str) -> tup
         )
 
     await loop.run_in_executor(None, _add)
-    logger.info("RAG: added document user_id=%s filename=%s chunks=%s", user_id, filename, len(chunks))
-    return True, f"Документ «{filename}» добавлен. Фрагментов: {len(chunks)}. Можете задавать вопросы по нему."
+    logger.info(
+        "RAG: added document user_id=%s filename=%s chunks=%s", user_id, filename, len(chunks)
+    )
+    return (
+        True,
+        f"Документ «{filename}» добавлен. Фрагментов: {len(chunks)}. Можете задавать вопросы по нему.",
+    )
 
 
 async def get_rag_context(user_id: int, query: str, top_k: int = RAG_TOP_K) -> Optional[str]:
@@ -226,7 +237,7 @@ async def list_rag_documents(user_id: int) -> List[str]:
     def _get():
         r = collection.get(where={"user_id": str(user_id)}, include=["metadatas"])
         names = set()
-        for m in (r.get("metadatas") or []):
+        for m in r.get("metadatas") or []:
             if m and isinstance(m, dict):
                 n = m.get("doc_name")
                 if n:

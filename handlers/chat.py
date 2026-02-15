@@ -26,7 +26,6 @@ from utils.analytics import track
 from utils.i18n import t
 from services.memory import extract_and_save_facts
 from services.rag import get_rag_context
-from handlers.chat_utils import make_regenerate_keyboard, split_long_message
 import config
 
 logger = structlog.get_logger(__name__)
@@ -182,7 +181,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # RAG: подтянуть контекст из загруженных PDF (если есть документы и запрос похож на вопрос)
     rag_context = await get_rag_context(user_id, user_message)
 
-    STREAM_EDIT_INTERVAL = 1.5  # обновлять сообщение не чаще раз в 1.5 сек (защита от лимитов Telegram)
+    stream_edit_interval = 1.5  # обновлять сообщение не чаще раз в 1.5 сек (защита от лимитов Telegram)
     try:
         status_msg = await update.message.reply_text(t("thinking"))
         accumulated = ""
@@ -197,7 +196,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 accumulated += chunk
                 now = time.monotonic()
                 # Обновляем сообщение раз в 1–2 сек, чтобы не спамить API и выглядело как стриминг
-                if len(accumulated) > 50 and (now - last_edit_at >= STREAM_EDIT_INTERVAL):
+                if len(accumulated) > 50 and (now - last_edit_at >= stream_edit_interval):
                     try:
                         safe = sanitize_markdown(accumulated)
                         await status_msg.edit_text(safe, parse_mode="Markdown")
@@ -213,7 +212,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         pass
             response = accumulated
             # Финальное обновление: если не успели обновить в последнем интервале — показываем полный текст
-            if response and (time.monotonic() - last_edit_at >= STREAM_EDIT_INTERVAL or last_edit_at == 0):
+            if response and (time.monotonic() - last_edit_at >= stream_edit_interval or last_edit_at == 0):
                 try:
                     safe = sanitize_markdown(response)
                     await status_msg.edit_text(safe, parse_mode="Markdown")
@@ -235,21 +234,48 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
 
+        def make_regenerate_keyboard(uid: int, req_id: str):
+            return InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(t("btn_favorite"), callback_data=f"fav_{uid}"),
+                    InlineKeyboardButton(t("btn_regenerate"), callback_data=f"retry_{uid}_{req_id}"),
+                ],
+                [InlineKeyboardButton(t("btn_rephrase"), callback_data=f"rephrase_{uid}")],
+            ])
+
         # Разбиваем длинные сообщения на части (лимит Telegram - 4096 символов)
-        parts = split_long_message(response, max_length=4000)
+        if len(response) > 4096:
+            parts = []
+            current_part = ""
+            code_blocks = re.split(r'(```[\s\S]*?```)', response)
+            for block in code_blocks:
+                if len(current_part) + len(block) > 4000:
+                    if current_part:
+                        parts.append(current_part)
+                    current_part = block
+                else:
+                    current_part += block
+            if current_part:
+                parts.append(current_part)
 
-        for i, part in enumerate(parts):
-            # Клавиатуру добавляем только к последней части
-            is_last = (i == len(parts) - 1)
-            reply_markup = make_regenerate_keyboard(user_id, request_id) if is_last else None
-
-            safe_part = sanitize_markdown(part)
+            for i, part in enumerate(parts):
+                reply_markup = make_regenerate_keyboard(user_id, request_id) if i == len(parts) - 1 else None
+                safe_part = sanitize_markdown(part)
+                try:
+                    await update.message.reply_text(safe_part, parse_mode='Markdown', reply_markup=reply_markup)
+                except BadRequest as e:
+                    if "parse" in str(e).lower() or "entities" in str(e).lower():
+                        await update.message.reply_text(part, parse_mode=None, reply_markup=reply_markup)
+                    else:
+                        raise
+        else:
+            reply_markup = make_regenerate_keyboard(user_id, request_id)
+            safe_response = sanitize_markdown(response)
             try:
-                await update.message.reply_text(safe_part, parse_mode='Markdown', reply_markup=reply_markup)
+                await update.message.reply_text(safe_response, parse_mode='Markdown', reply_markup=reply_markup)
             except BadRequest as e:
-                # Если markdown сломался (например, из-за разбиения посередине жирного текста), шлём без него
                 if "parse" in str(e).lower() or "entities" in str(e).lower():
-                    await update.message.reply_text(part, parse_mode=None, reply_markup=reply_markup)
+                    await update.message.reply_text(response, parse_mode=None, reply_markup=reply_markup)
                 else:
                     raise
             
