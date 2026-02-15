@@ -5,9 +5,9 @@ Circuit Breaker + Model Cascading — неубиваемость LLM API
 """
 import asyncio
 import json
-import time
 import logging
-from dataclasses import dataclass, field
+import time
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
@@ -198,9 +198,7 @@ async def chat_completion(
 
     for provider in providers:
         models_order = provider.models.copy()
-        if model_hint and provider.name == "artemox" and model_hint not in models_order:
-            models_order = [model_hint] + [m for m in models_order if m != model_hint]
-        elif model_hint and provider.name == "artemox":
+        if model_hint and provider.name == "artemox":
             models_order = [model_hint] + [m for m in models_order if m != model_hint]
         for model in models_order:
             model_key = f"{provider.name}:{model}"
@@ -219,7 +217,7 @@ async def chat_completion(
                 if err:
                     last_error = err
                     try:
-                        from utils.metrics import record_request, record_error
+                        from utils.metrics import record_error, record_request
                         record_request(model_key, status="error")
                         record_error(model_key, type(err).__name__)
                     except Exception:
@@ -228,7 +226,11 @@ async def chat_completion(
                     continue
                 if text:
                     try:
-                        from utils.metrics import record_request, record_response_time, record_tokens
+                        from utils.metrics import (
+                            record_request,
+                            record_response_time,
+                            record_tokens,
+                        )
                         record_request(model_key, status="success")
                         record_response_time(model_key, duration)
                         if tokens:
