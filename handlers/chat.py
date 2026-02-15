@@ -1,6 +1,7 @@
 """
 Обработчик текстовых сообщений
 """
+
 import uuid
 from datetime import datetime
 
@@ -26,6 +27,7 @@ from utils.i18n import t
 
 logger = structlog.get_logger(__name__)
 
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка текстовых сообщений"""
     user_id = update.effective_user.id
@@ -42,8 +44,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Проверка rate limit
     if not await rate_limit_middleware.check_rate_limit(user_id):
         await update.message.reply_text(
-            t("rate_limit") + f" {rate_limit_middleware.time_window} сек.\n💡 Лимит: {rate_limit_middleware.max_requests} запросов в минуту",
-            parse_mode=None
+            t("rate_limit")
+            + f" {rate_limit_middleware.time_window} сек.\n💡 Лимит: {rate_limit_middleware.max_requests} запросов в минуту",
+            parse_mode=None,
         )
         return
 
@@ -64,7 +67,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Обычная обработка текста (потоковая генерация)
-    context.user_data.pop('last_image_base64', None)
+    context.user_data.pop("last_image_base64", None)
     context.user_data["last_prompt"] = user_message
 
     # ID запроса для кнопки «Перегенерировать» — в callback_data передаём его, чтобы знать, какой промпт перезапускать

@@ -23,11 +23,13 @@ except ImportError:
 
 logger = structlog.get_logger(__name__)
 
-IMAGE_KEYWORDS = ['картинк', 'изображен', 'создай', 'скинь', 'покажи', 'нарисуй', 'сгенерируй']
+IMAGE_KEYWORDS = ["картинк", "изображен", "создай", "скинь", "покажи", "нарисуй", "сгенерируй"]
+
 
 def is_image_request(text: str) -> bool:
     """Проверяет, является ли сообщение запросом на генерацию изображения."""
     return any(keyword in text.lower() for keyword in IMAGE_KEYWORDS)
+
 
 def get_image_prompt(text: str) -> str:
     """Извлекает промпт для изображения из текста."""
@@ -39,16 +41,19 @@ def get_image_prompt(text: str) -> str:
         # Но для русского языка \b работает не всегда корректно с кириллицей, поэтому просто заменяем
         if keyword in prompt.lower():
             pattern = re.compile(re.escape(keyword), re.IGNORECASE)
-            prompt = pattern.sub('', prompt, count=1).strip()
+            prompt = pattern.sub("", prompt, count=1).strip()
 
     # Удаляем лишние пробелы и знаки препинания в начале. Также удаляем "у" в начале, если оно осталось от "картинку"
-    prompt = re.sub(r'^[\s,.]+', '', prompt).strip()
-    if prompt.lower().startswith('у '):
+    prompt = re.sub(r"^[\s,.]+", "", prompt).strip()
+    if prompt.lower().startswith("у "):
         prompt = prompt[2:].strip()
 
     return prompt if prompt else "красивое изображение"
 
-async def handle_image_generation(update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, user_id: int):
+
+async def handle_image_generation(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str, user_id: int
+):
     """Обрабатывает запрос на генерацию изображения."""
     date_str = datetime.utcnow().strftime("%Y-%m-%d")
     await db.increment_daily_usage(user_id, date_str)
@@ -82,16 +87,15 @@ async def handle_image_generation(update: Update, context: ContextTypes.DEFAULT_
         image_bytes, strategy_name = await generate_with_queue(prompt, user_id)
 
         from io import BytesIO
+
         photo_file = BytesIO(image_bytes)
         photo_file.name = "image.png"
 
-        caption = f"✨ Изображение готово!\n\n📝 Описание: {prompt}\n💡 Использовано: {strategy_name}"
-
-        await update.message.reply_photo(
-            photo=photo_file,
-            caption=caption,
-            parse_mode=None
+        caption = (
+            f"✨ Изображение готово!\n\n📝 Описание: {prompt}\n💡 Использовано: {strategy_name}"
         )
+
+        await update.message.reply_photo(photo=photo_file, caption=caption, parse_mode=None)
 
         try:
             await status_msg.delete()
@@ -102,38 +106,41 @@ async def handle_image_generation(update: Update, context: ContextTypes.DEFAULT_
         logger.error("image_generation_error", user_id=user_id, error=str(e))
         await status_msg.edit_text(t("error_image") + f": {str(e)[:200]}")
 
-async def handle_multimodal_request(update: Update, context: ContextTypes.DEFAULT_TYPE, user_message: str, user_id: int) -> bool:
+
+async def handle_multimodal_request(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, user_message: str, user_id: int
+) -> bool:
     """
     Обрабатывает запрос с контекстом изображения (если есть).
     Возвращает True, если запрос обработан, иначе False.
     """
-    last_image = context.user_data.get('last_image_base64') if context.user_data else None
+    last_image = context.user_data.get("last_image_base64") if context.user_data else None
 
     if last_image and len(user_message) > 5:
         await update.message.reply_chat_action("typing")
         try:
             response = await gemini_service.generate_with_image_context(
-                prompt=user_message,
-                image_base64=last_image,
-                user_id=user_id,
-                use_context=True
+                prompt=user_message, image_base64=last_image, user_id=user_id, use_context=True
             )
             # Удаляем картинку из контекста после использования (одноразовый контекст для простоты)
-            context.user_data.pop('last_image_base64', None)
+            context.user_data.pop("last_image_base64", None)
             safe_response = sanitize_markdown(response)
-            await update.message.reply_text(safe_response, parse_mode='Markdown')
+            await update.message.reply_text(safe_response, parse_mode="Markdown")
             return True
         except Exception as e:
             logger.error("multimodal_response_error", user_id=user_id, error=str(e))
-            context.user_data.pop('last_image_base64', None)
+            context.user_data.pop("last_image_base64", None)
 
     # Если не обработали как мультимодальный, но картинка была - очищаем
     if context.user_data:
-        context.user_data.pop('last_image_base64', None)
+        context.user_data.pop("last_image_base64", None)
 
     return False
 
-async def generate_and_reply_text(chat, user_id: int, prompt: str, context, rag_context: str = None) -> str:
+
+async def generate_and_reply_text(
+    chat, user_id: int, prompt: str, context, rag_context: str = None
+) -> str:
     """Генерация ответа (стриминг) — возвращает полный текст. Используется при ошибке стриминга и для retry."""
     accumulated = ""
     try:
@@ -147,7 +154,14 @@ async def generate_and_reply_text(chat, user_id: int, prompt: str, context, rag_
         )
     return accumulated
 
-async def stream_text_response(update: Update, context: ContextTypes.DEFAULT_TYPE, user_message: str, user_id: int, rag_context: str = None):
+
+async def stream_text_response(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    user_message: str,
+    user_id: int,
+    rag_context: str = None,
+):
     """
     Основная логика потоковой генерации ответа.
     """
@@ -184,7 +198,9 @@ async def stream_text_response(update: Update, context: ContextTypes.DEFAULT_TYP
 
             response = accumulated
             # Финальное обновление
-            if response and (time.monotonic() - last_edit_at >= stream_edit_interval or last_edit_at == 0):
+            if response and (
+                time.monotonic() - last_edit_at >= stream_edit_interval or last_edit_at == 0
+            ):
                 try:
                     safe = sanitize_markdown(response)
                     await status_msg.edit_text(safe, parse_mode="Markdown")
@@ -198,7 +214,9 @@ async def stream_text_response(update: Update, context: ContextTypes.DEFAULT_TYP
                     pass
 
         except Exception as stream_err:
-            logger.warning("stream_error", user_id=user_id, error=str(stream_err), fallback="non_stream")
+            logger.warning(
+                "stream_error", user_id=user_id, error=str(stream_err), fallback="non_stream"
+            )
             response = await generate_and_reply_text(
                 update.effective_chat, user_id, user_message, context, rag_context=rag_context
             )
@@ -215,15 +233,19 @@ async def stream_text_response(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text(t("error_generic") + f": {str(e)[:200]}", parse_mode=None)
         return None
 
+
 def make_regenerate_keyboard(uid: int, req_id: str) -> InlineKeyboardMarkup:
     """Создает клавиатуру с кнопками регенерации."""
-    return InlineKeyboardMarkup([
+    return InlineKeyboardMarkup(
         [
-            InlineKeyboardButton(t("btn_favorite"), callback_data=f"fav_{uid}"),
-            InlineKeyboardButton(t("btn_regenerate"), callback_data=f"retry_{uid}_{req_id}"),
-        ],
-        [InlineKeyboardButton(t("btn_rephrase"), callback_data=f"rephrase_{uid}")],
-    ])
+            [
+                InlineKeyboardButton(t("btn_favorite"), callback_data=f"fav_{uid}"),
+                InlineKeyboardButton(t("btn_regenerate"), callback_data=f"retry_{uid}_{req_id}"),
+            ],
+            [InlineKeyboardButton(t("btn_rephrase"), callback_data=f"rephrase_{uid}")],
+        ]
+    )
+
 
 async def send_response_parts(update: Update, response: str, user_id: int, request_id: str):
     """Отправляет ответ частями, если он слишком длинный."""
@@ -233,7 +255,7 @@ async def send_response_parts(update: Update, response: str, user_id: int, reque
     if len(response) > 4096:
         parts = []
         current_part = ""
-        code_blocks = re.split(r'(```[\s\S]*?```)', response)
+        code_blocks = re.split(r"(```[\s\S]*?```)", response)
         for block in code_blocks:
             if len(current_part) + len(block) > 4000:
                 if current_part:
@@ -245,22 +267,32 @@ async def send_response_parts(update: Update, response: str, user_id: int, reque
             parts.append(current_part)
 
         for i, part in enumerate(parts):
-            reply_markup = make_regenerate_keyboard(user_id, request_id) if i == len(parts) - 1 else None
+            reply_markup = (
+                make_regenerate_keyboard(user_id, request_id) if i == len(parts) - 1 else None
+            )
             safe_part = sanitize_markdown(part)
             try:
-                await update.message.reply_text(safe_part, parse_mode='Markdown', reply_markup=reply_markup)
+                await update.message.reply_text(
+                    safe_part, parse_mode="Markdown", reply_markup=reply_markup
+                )
             except BadRequest as e:
                 if "parse" in str(e).lower() or "entities" in str(e).lower():
-                    await update.message.reply_text(part, parse_mode=None, reply_markup=reply_markup)
+                    await update.message.reply_text(
+                        part, parse_mode=None, reply_markup=reply_markup
+                    )
                 else:
                     raise
     else:
         reply_markup = make_regenerate_keyboard(user_id, request_id)
         safe_response = sanitize_markdown(response)
         try:
-            await update.message.reply_text(safe_response, parse_mode='Markdown', reply_markup=reply_markup)
+            await update.message.reply_text(
+                safe_response, parse_mode="Markdown", reply_markup=reply_markup
+            )
         except BadRequest as e:
             if "parse" in str(e).lower() or "entities" in str(e).lower():
-                await update.message.reply_text(response, parse_mode=None, reply_markup=reply_markup)
+                await update.message.reply_text(
+                    response, parse_mode=None, reply_markup=reply_markup
+                )
             else:
                 raise

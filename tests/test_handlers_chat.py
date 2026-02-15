@@ -20,26 +20,30 @@ def mock_update():
     update.message.reply_chat_action = AsyncMock()
     return update
 
+
 @pytest.fixture
 def mock_context():
     context = MagicMock()
     context.user_data = {}
     return context
 
+
 @pytest.fixture
 async def mock_db():
-    with patch('database.db.db') as mock_db_instance:
+    with patch("database.db.db") as mock_db_instance:
         mock_db_instance.async_session = MagicMock()
         mock_db_instance.async_session.return_value.__aenter__.return_value = AsyncMock()
         mock_db_instance.is_premium = AsyncMock(return_value=False)
         mock_db_instance.get_daily_usage = AsyncMock(return_value=0)
         yield mock_db_instance
 
+
 @pytest.mark.asyncio
 async def test_is_image_request():
     assert is_image_request("создай картинку кот")
     assert is_image_request("нарисуй пейзаж")
     assert not is_image_request("привет, как дела?")
+
 
 @pytest.mark.asyncio
 async def test_get_image_prompt():
@@ -50,20 +54,27 @@ async def test_get_image_prompt():
     # Случай без изменений
     assert get_image_prompt("просто текст") == "просто текст"
 
+
 @pytest.mark.asyncio
 async def test_handle_message_banned_user(mock_update, mock_context):
-    with patch('database.db.Database.is_banned', new_callable=AsyncMock) as mock_is_banned:
+    with patch("database.db.Database.is_banned", new_callable=AsyncMock) as mock_is_banned:
         mock_is_banned.return_value = True
 
         await handle_message(mock_update, mock_context)
 
-        mock_update.message.reply_text.assert_called_with("⛔ Вы заблокированы и не можете использовать бота.")
+        mock_update.message.reply_text.assert_called_with(
+            "⛔ Вы заблокированы и не можете использовать бота."
+        )
+
 
 @pytest.mark.asyncio
 async def test_handle_message_rate_limit(mock_update, mock_context):
-    with patch('database.db.Database.is_banned', new_callable=AsyncMock) as mock_is_banned, \
-         patch('middlewares.rate_limit.rate_limit_middleware.check_rate_limit', new_callable=AsyncMock) as mock_check_rate_limit:
-
+    with (
+        patch("database.db.Database.is_banned", new_callable=AsyncMock) as mock_is_banned,
+        patch(
+            "middlewares.rate_limit.rate_limit_middleware.check_rate_limit", new_callable=AsyncMock
+        ) as mock_check_rate_limit,
+    ):
         mock_is_banned.return_value = False
         mock_check_rate_limit.return_value = False
 
@@ -73,17 +84,25 @@ async def test_handle_message_rate_limit(mock_update, mock_context):
         args, _ = mock_update.message.reply_text.call_args
         assert "Лимит" in args[0]
 
+
 @pytest.mark.asyncio
 async def test_handle_message_image_request(mock_update, mock_context):
     mock_update.message.text = "создай картинку тест"
 
-    with patch('database.db.Database.is_banned', new_callable=AsyncMock) as mock_is_banned, \
-         patch('middlewares.rate_limit.rate_limit_middleware.check_rate_limit', new_callable=AsyncMock) as mock_check_rate_limit, \
-         patch('middlewares.usage_limit.check_can_make_request', new_callable=AsyncMock) as mock_check_usage, \
-         patch('handlers.chat.handle_image_generation', new_callable=AsyncMock) as mock_handle_image, \
-         patch('database.db.Database.is_premium', new_callable=AsyncMock) as mock_is_premium, \
-         patch('database.db.Database.get_daily_usage', new_callable=AsyncMock) as mock_get_daily_usage:
-
+    with (
+        patch("database.db.Database.is_banned", new_callable=AsyncMock) as mock_is_banned,
+        patch(
+            "middlewares.rate_limit.rate_limit_middleware.check_rate_limit", new_callable=AsyncMock
+        ) as mock_check_rate_limit,
+        patch(
+            "middlewares.usage_limit.check_can_make_request", new_callable=AsyncMock
+        ) as mock_check_usage,
+        patch("handlers.chat.handle_image_generation", new_callable=AsyncMock) as mock_handle_image,
+        patch("database.db.Database.is_premium", new_callable=AsyncMock) as mock_is_premium,
+        patch(
+            "database.db.Database.get_daily_usage", new_callable=AsyncMock
+        ) as mock_get_daily_usage,
+    ):
         mock_is_banned.return_value = False
         mock_check_rate_limit.return_value = True
         mock_check_usage.return_value = (True, "")
@@ -94,19 +113,27 @@ async def test_handle_message_image_request(mock_update, mock_context):
 
         mock_handle_image.assert_called_once()
 
+
 @pytest.mark.asyncio
 async def test_handle_message_text_flow(mock_update, mock_context):
-    with patch('database.db.Database.is_banned', new_callable=AsyncMock) as mock_is_banned, \
-         patch('middlewares.rate_limit.rate_limit_middleware.check_rate_limit', new_callable=AsyncMock) as mock_check_rate_limit, \
-         patch('middlewares.usage_limit.check_can_make_request', new_callable=AsyncMock) as mock_check_usage, \
-         patch('handlers.chat.extract_and_save_facts', new_callable=AsyncMock), \
-         patch('handlers.chat.get_rag_context', new_callable=AsyncMock) as mock_rag, \
-         patch('handlers.chat.stream_text_response', new_callable=AsyncMock) as mock_stream, \
-         patch('handlers.chat.send_response_parts', new_callable=AsyncMock) as mock_send_parts, \
-         patch('database.db.Database.increment_daily_usage', new_callable=AsyncMock), \
-         patch('database.db.Database.is_premium', new_callable=AsyncMock) as mock_is_premium, \
-         patch('database.db.Database.get_daily_usage', new_callable=AsyncMock) as mock_get_daily_usage:
-
+    with (
+        patch("database.db.Database.is_banned", new_callable=AsyncMock) as mock_is_banned,
+        patch(
+            "middlewares.rate_limit.rate_limit_middleware.check_rate_limit", new_callable=AsyncMock
+        ) as mock_check_rate_limit,
+        patch(
+            "middlewares.usage_limit.check_can_make_request", new_callable=AsyncMock
+        ) as mock_check_usage,
+        patch("handlers.chat.extract_and_save_facts", new_callable=AsyncMock),
+        patch("handlers.chat.get_rag_context", new_callable=AsyncMock) as mock_rag,
+        patch("handlers.chat.stream_text_response", new_callable=AsyncMock) as mock_stream,
+        patch("handlers.chat.send_response_parts", new_callable=AsyncMock) as mock_send_parts,
+        patch("database.db.Database.increment_daily_usage", new_callable=AsyncMock),
+        patch("database.db.Database.is_premium", new_callable=AsyncMock) as mock_is_premium,
+        patch(
+            "database.db.Database.get_daily_usage", new_callable=AsyncMock
+        ) as mock_get_daily_usage,
+    ):
         mock_is_banned.return_value = False
         mock_check_rate_limit.return_value = True
         mock_check_usage.return_value = (True, "")
