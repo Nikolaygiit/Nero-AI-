@@ -1,13 +1,12 @@
 """
 Скрипт миграции данных из JSON в SQLite
 """
-import json
-import os
 import asyncio
+import json
 import logging
-from datetime import datetime
+import os
+
 from database import db
-from database.models import User, Message, Stats, Favorite, Achievement
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -15,20 +14,20 @@ logger = logging.getLogger(__name__)
 
 async def migrate_from_json(json_file: str = 'bot_data.json'):
     """Миграция данных из JSON файла в SQLite"""
-    
+
     # Инициализация базы данных
     await db.init()
-    
+
     if not json_file or not os.path.exists(json_file):
         logger.warning(f"Файл {json_file} не найден. Миграция пропущена.")
         return
-    
+
     logger.info(f"Начинаю миграцию данных из {json_file}...")
-    
+
     try:
         with open(json_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        
+
         # Миграция пользователей и настроек
         settings = data.get('settings', {})
         for user_id_str, user_settings in settings.items():
@@ -43,9 +42,9 @@ async def migrate_from_json(json_file: str = 'bot_data.json'):
                 )
             except Exception as e:
                 logger.error(f"Ошибка миграции пользователя {user_id_str}: {e}")
-        
+
         logger.info(f"Мигрировано {len(settings)} пользователей")
-        
+
         # Миграция истории сообщений
         conversations = data.get('conversations', {})
         migrated_messages = 0
@@ -61,9 +60,9 @@ async def migrate_from_json(json_file: str = 'bot_data.json'):
                     migrated_messages += 1
             except Exception as e:
                 logger.error(f"Ошибка миграции сообщений пользователя {user_id_str}: {e}")
-        
+
         logger.info(f"Мигрировано {migrated_messages} сообщений")
-        
+
         # Миграция статистики
         stats_data = data.get('stats', {})
         for user_id_str, stats in stats_data.items():
@@ -74,7 +73,7 @@ async def migrate_from_json(json_file: str = 'bot_data.json'):
                     for command, count in commands_used.items():
                         for _ in range(count):
                             await db.update_stats(user_id, command=command)
-                
+
                 await db.update_stats(
                     user_id,
                     requests_count=stats.get('requests', 0),
@@ -83,9 +82,9 @@ async def migrate_from_json(json_file: str = 'bot_data.json'):
                 )
             except Exception as e:
                 logger.error(f"Ошибка миграции статистики пользователя {user_id_str}: {e}")
-        
+
         logger.info(f"Мигрировано статистики для {len(stats_data)} пользователей")
-        
+
         # Миграция избранного
         favorites = data.get('favorites', {})
         migrated_favorites = 0
@@ -102,9 +101,9 @@ async def migrate_from_json(json_file: str = 'bot_data.json'):
                     migrated_favorites += 1
             except Exception as e:
                 logger.error(f"Ошибка миграции избранного пользователя {user_id_str}: {e}")
-        
+
         logger.info(f"Мигрировано {migrated_favorites} записей избранного")
-        
+
         # Миграция достижений
         achievements = data.get('achievements', {})
         migrated_achievements = 0
@@ -116,11 +115,11 @@ async def migrate_from_json(json_file: str = 'bot_data.json'):
                     migrated_achievements += 1
             except Exception as e:
                 logger.error(f"Ошибка миграции достижений пользователя {user_id_str}: {e}")
-        
+
         logger.info(f"Мигрировано {migrated_achievements} достижений")
-        
+
         logger.info("✅ Миграция завершена успешно!")
-        
+
     except Exception as e:
         logger.error(f"Ошибка миграции: {e}", exc_info=True)
     finally:

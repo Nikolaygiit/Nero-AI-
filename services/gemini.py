@@ -76,13 +76,13 @@ class GeminiService:
     ) -> str:
         """
         Генерация контента через Gemini API
-        
+
         Args:
             prompt: Текст запроса
             user_id: ID пользователя для контекста
             use_context: Использовать ли историю диалога
             model: Конкретная модель (если None - выбирается автоматически)
-        
+
         Returns:
             Сгенерированный текст
         """
@@ -388,12 +388,12 @@ class GeminiService:
     ) -> str:
         """
         Анализ изображения через Gemini Vision
-        
+
         Args:
             image_base64: Изображение в формате base64
             prompt: Текст запроса для анализа
             user_id: ID пользователя
-        
+
         Returns:
             Текст анализа изображения
         """
