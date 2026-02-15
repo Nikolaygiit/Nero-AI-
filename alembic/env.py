@@ -1,6 +1,7 @@
 """
 Alembic env — подключение к SQLite через синхронный движок (для миграций)
 """
+
 import asyncio
 from logging.config import fileConfig
 

@@ -2,6 +2,7 @@
 Админ-панель (Streamlit): DAU/MAU, расход токенов, список пользователей, Ban, Premium
 Запуск: streamlit run admin/app.py
 """
+
 import os
 import sqlite3
 from pathlib import Path
@@ -21,6 +22,7 @@ def check_auth() -> bool:
     """Проверка доступа к админке"""
     try:
         from config import settings
+
         pwd = getattr(settings, "ADMIN_PANEL_PASSWORD", "") or os.getenv("ADMIN_PANEL_PASSWORD", "")
     except Exception:
         pwd = os.getenv("ADMIN_PANEL_PASSWORD", "")
@@ -37,7 +39,10 @@ def login_form():
     if st.button("Войти"):
         try:
             from config import settings
-            expected = getattr(settings, "ADMIN_PANEL_PASSWORD", "") or os.getenv("ADMIN_PANEL_PASSWORD", "")
+
+            expected = getattr(settings, "ADMIN_PANEL_PASSWORD", "") or os.getenv(
+                "ADMIN_PANEL_PASSWORD", ""
+            )
         except Exception:
             expected = os.getenv("ADMIN_PANEL_PASSWORD", "")
         if pwd_input == expected:
@@ -58,7 +63,8 @@ def load_daily_active(days: int = 30) -> pd.DataFrame:
             WHERE created_at >= date('now', '-%d days')
             GROUP BY date(created_at)
             ORDER BY date
-            """ % days,
+            """
+            % days,
             conn,
         )
     except Exception:
@@ -77,7 +83,8 @@ def load_mau(days: int = 30) -> int:
             SELECT COUNT(DISTINCT user_id) as mau
             FROM messages
             WHERE created_at >= date('now', '-%d days')
-            """ % days,
+            """
+            % days,
             conn,
         )
         return int(row.iloc[0]["mau"]) if not row.empty else 0
@@ -232,8 +239,12 @@ def main():
         conn = get_conn()
         try:
             total_users = pd.read_sql_query("SELECT COUNT(*) as c FROM users", conn).iloc[0]["c"]
-            total_tokens = pd.read_sql_query("SELECT COALESCE(SUM(tokens_used), 0) as c FROM stats", conn).iloc[0]["c"]
-            total_images = pd.read_sql_query("SELECT COALESCE(SUM(images_generated), 0) as c FROM stats", conn).iloc[0]["c"]
+            total_tokens = pd.read_sql_query(
+                "SELECT COALESCE(SUM(tokens_used), 0) as c FROM stats", conn
+            ).iloc[0]["c"]
+            total_images = pd.read_sql_query(
+                "SELECT COALESCE(SUM(images_generated), 0) as c FROM stats", conn
+            ).iloc[0]["c"]
             mau = load_mau(30)
         except Exception:
             total_users = total_tokens = total_images = mau = 0
@@ -311,9 +322,12 @@ def main():
         st.caption("Только просмотр. Редактирование — в config.py")
         try:
             import config
+
             for key, val in config.PERSONAS.items():
                 with st.expander(f"**{val['name']}** (`{key}`)"):
-                    st.text_area("Промпт", val["prompt"], height=120, disabled=True, key=f"persona_{key}")
+                    st.text_area(
+                        "Промпт", val["prompt"], height=120, disabled=True, key=f"persona_{key}"
+                    )
         except Exception as e:
             st.warning(f"Не удалось загрузить персонажей: {e}")
 

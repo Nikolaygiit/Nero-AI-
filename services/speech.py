@@ -1,6 +1,7 @@
 """
 Speech: Whisper (STT) и TTS через Artemox/Gemini
 """
+
 import logging
 from typing import Optional
 
@@ -16,7 +17,9 @@ async def speech_to_text(voice_bytes: bytes, lang: str = "ru") -> Optional[str]:
     Распознавание речи (Whisper) через OpenAI или Artemox.
     """
     api_key = config.settings.OPENAI_API_KEY or config.GEMINI_API_KEY
-    api_base = "https://api.openai.com/v1" if config.settings.OPENAI_API_KEY else config.GEMINI_API_BASE
+    api_base = (
+        "https://api.openai.com/v1" if config.settings.OPENAI_API_KEY else config.GEMINI_API_BASE
+    )
     url = f"{api_base.rstrip('/')}/audio/transcriptions"
     headers = {"Authorization": f"Bearer {api_key}"}
     files = {"file": ("voice.ogg", voice_bytes, "audio/ogg")}
