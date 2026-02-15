@@ -1,7 +1,7 @@
+# ruff: noqa: I001
 import sys
 import unittest
 from unittest.mock import MagicMock, patch
-import asyncio
 
 # Create mocks for dependencies that might be missing or problematic
 mock_config = MagicMock()
@@ -28,7 +28,7 @@ sys.modules['database'] = MagicMock()
 if 'services.llm_cascade' in sys.modules:
     del sys.modules['services.llm_cascade']
 
-from services import llm_cascade
+from services import llm_cascade  # noqa: E402
 
 class TestLLMCascadeLogic(unittest.IsolatedAsyncioTestCase):
     async def test_model_reordering_logic(self):
@@ -56,7 +56,7 @@ class TestLLMCascadeLogic(unittest.IsolatedAsyncioTestCase):
 
                 # Check first call model
                 args, _ = mock_req.call_args_list[0]
-                called_provider, called_model = args[0], args[1]
+                _, called_model = args[0], args[1]
                 print(f"Case 1 result: First call to {called_model}")
                 # Should be model2 because it was prioritized
                 self.assertEqual(called_model, "model2")
@@ -68,7 +68,7 @@ class TestLLMCascadeLogic(unittest.IsolatedAsyncioTestCase):
                 await llm_cascade.chat_completion([], model_hint="modelX")
 
                 args, _ = mock_req.call_args_list[0]
-                called_provider, called_model = args[0], args[1]
+                _, called_model = args[0], args[1]
                 print(f"Case 2 result: First call to {called_model}")
                 # Should be modelX
                 self.assertEqual(called_model, "modelX")
@@ -79,7 +79,7 @@ class TestLLMCascadeLogic(unittest.IsolatedAsyncioTestCase):
                 print("Running Case 3: No hint")
                 await llm_cascade.chat_completion([], model_hint=None)
                 args, _ = mock_req.call_args_list[0]
-                called_provider, called_model = args[0], args[1]
+                _, called_model = args[0], args[1]
                 print(f"Case 3 result: First call to {called_model}")
                 # Should be model1 (first in list)
                 self.assertEqual(called_model, "model1")
