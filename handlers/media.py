@@ -1,6 +1,7 @@
 """
 Обработчики медиа (фото, голос) — Vision + Whisper
 """
+
 import base64
 import logging
 
@@ -24,7 +25,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await rate_limit_middleware.check_rate_limit(user_id):
         await update.message.reply_text(
             f"⏳ Слишком много запросов. Подождите {rate_limit_middleware.time_window} сек.",
-            parse_mode=None
+            parse_mode=None,
         )
         return
     can_proceed, limit_msg = await check_can_make_request(user_id)
@@ -38,12 +39,23 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     caption = update.message.caption or "Опиши это изображение подробно на русском языке"
 
     # Проверяем, хочет ли пользователь генерацию изображения на основе фото
-    generation_keywords = ['создай', 'сгенерируй', 'нарисуй', 'сделай', 'портрет', 'аватар', 'измени', 'замени']
+    generation_keywords = [
+        "создай",
+        "сгенерируй",
+        "нарисуй",
+        "сделай",
+        "портрет",
+        "аватар",
+        "измени",
+        "замени",
+    ]
     wants_generation = any(keyword in caption.lower() for keyword in generation_keywords)
 
     if wants_generation:
         # TODO: Реализовать генерацию изображения на основе фото
-        await update.message.reply_text("⚠️ Генерация изображений на основе фото пока не реализована")
+        await update.message.reply_text(
+            "⚠️ Генерация изображений на основе фото пока не реализована"
+        )
         return
 
     # Обычный анализ изображения
@@ -54,17 +66,15 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         photo_bytes = await file.download_as_bytearray()
 
         # Конвертируем в base64
-        image_base64 = base64.b64encode(photo_bytes).decode('utf-8')
+        image_base64 = base64.b64encode(photo_bytes).decode("utf-8")
 
         # Сохраняем в контексте для мультимодального диалога (вопросы о картинке в чате)
         if context.user_data is not None:
-            context.user_data['last_image_base64'] = image_base64
+            context.user_data["last_image_base64"] = image_base64
 
         # Анализируем через Gemini Vision
         analysis = await gemini_service.analyze_image(
-            image_base64=image_base64,
-            prompt=caption,
-            user_id=user_id
+            image_base64=image_base64, prompt=caption, user_id=user_id
         )
 
         track("analyzed_image", str(user_id))
@@ -73,8 +83,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         await analysis_msg.edit_text(
             f"📸 **Анализ изображения:**\n\n{safe_analysis}",
-            parse_mode='Markdown',
-            reply_markup=reply_markup
+            parse_mode="Markdown",
+            reply_markup=reply_markup,
         )
 
     except Exception as e:
@@ -108,6 +118,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         track("voice_transcribed", str(user_id))
         # Подставляем распознанный текст как новое сообщение — перенаправляем в handle_message
         from handlers.chat import handle_message
+
         update.message.text = text
         await handle_message(update, context)
     except Exception as e:

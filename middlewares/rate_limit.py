@@ -1,6 +1,7 @@
 """
 Middleware для rate limiting
 """
+
 import logging
 import time
 from collections import OrderedDict
@@ -64,8 +65,7 @@ class RateLimitMiddleware:
 
         # Очищаем старые запросы текущего пользователя (старше time_window секунд)
         active_timestamps = [
-            timestamp for timestamp in timestamps
-            if current_time - timestamp < self.time_window
+            timestamp for timestamp in timestamps if current_time - timestamp < self.time_window
         ]
 
         # Проверяем лимит
@@ -93,12 +93,12 @@ class RateLimitMiddleware:
                 await update.message.reply_text(
                     f"⏳ Слишком много запросов. Подождите {self.time_window} секунд.\n\n"
                     f"💡 Лимит: {self.max_requests} запросов в минуту",
-                    parse_mode=None
+                    parse_mode=None,
                 )
             elif update.callback_query:
                 await update.callback_query.answer(
                     f"⏳ Слишком много запросов. Подождите {self.time_window} секунд.",
-                    show_alert=True
+                    show_alert=True,
                 )
             return
 
