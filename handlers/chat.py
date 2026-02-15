@@ -1,20 +1,22 @@
 """
 Обработчик текстовых сообщений
 """
+
 import structlog
 from telegram import Update
 from telegram.ext import ContextTypes
+
 from database import db
-from middlewares.rate_limit import rate_limit_middleware
-from middlewares.usage_limit import check_can_make_request
-from utils.i18n import t
-from services.memory import extract_and_save_facts
 from handlers.chat_utils import (
-    is_image_request,
     handle_image_request,
     handle_multimodal_request,
-    handle_text_request
+    handle_text_request,
+    is_image_request,
 )
+from middlewares.rate_limit import rate_limit_middleware
+from middlewares.usage_limit import check_can_make_request
+from services.memory import extract_and_save_facts
+from utils.i18n import t
 
 logger = structlog.get_logger(__name__)
 
@@ -34,8 +36,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Проверка rate limit
     if not await rate_limit_middleware.check_rate_limit(user_id):
         await update.message.reply_text(
-            t("rate_limit") + f" {rate_limit_middleware.time_window} сек.\n💡 Лимит: {rate_limit_middleware.max_requests} запросов в минуту",
-            parse_mode=None
+            t("rate_limit")
+            + f" {rate_limit_middleware.time_window} сек.\n💡 Лимит: {rate_limit_middleware.max_requests} запросов в минуту",
+            parse_mode=None,
         )
         return
 
@@ -44,12 +47,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not can_proceed:
         await update.message.reply_text(limit_msg, parse_mode=None)
         return
-    
+
     # Проверка на запрос изображения
     if is_image_request(user_message):
         await handle_image_request(update, context)
         return
-    
+
     # Мультимодальный контекст
     if await handle_multimodal_request(update, context):
         return
