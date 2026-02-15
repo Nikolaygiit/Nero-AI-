@@ -1,6 +1,7 @@
 """
 Лимит бесплатных запросов: 10/день, премиум — без лимита
 """
+
 from datetime import datetime
 
 import config

@@ -2,18 +2,17 @@
 Конфигурация бота — валидация через pydantic-settings.
 Бот не запустится, если обязательные ключи отсутствуют.
 """
+
 from typing import List
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Настройки из .env — валидируются при импорте."""
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore"
-    )
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # Обязательные ключи — без них бот не запустится
     ARTEMOX_API_KEY: str = Field(min_length=1, description="API ключ Artemox (обязательно)")
@@ -25,12 +24,21 @@ class Settings(BaseSettings):
     REDIS_URL: str = Field(default="redis://localhost:6379/0", description="URL Redis для очередей")
     POSTHOG_API_KEY: str = Field(default="", description="PostHog project API key для аналитики")
     POSTHOG_HOST: str = Field(default="https://us.posthog.com", description="PostHog host")
-    OPENAI_API_KEY: str = Field(default="", description="OpenAI API key для Whisper (STT), fallback LLM")
+    OPENAI_API_KEY: str = Field(
+        default="", description="OpenAI API key для Whisper (STT), fallback LLM"
+    )
     DEEPSEEK_API_KEY: str = Field(default="", description="DeepSeek API key для fallback LLM")
-    ADMIN_PANEL_PASSWORD: str = Field(default="", description="Пароль для веб-админки (пусто = без защиты)")
+    ADMIN_PANEL_PASSWORD: str = Field(
+        default="", description="Пароль для веб-админки (пусто = без защиты)"
+    )
     # RAG: путь к ChromaDB, модель эмбеддингов (если API поддерживает /embeddings)
-    RAG_CHROMA_PATH: str = Field(default="data/chroma", description="Папка для векторной БД ChromaDB")
-    RAG_EMBEDDING_MODEL: str = Field(default="gemini-embedding-001", description="Модель для эмбеддингов (gemini-embedding-001 или text-embedding-004)")
+    RAG_CHROMA_PATH: str = Field(
+        default="data/chroma", description="Папка для векторной БД ChromaDB"
+    )
+    RAG_EMBEDDING_MODEL: str = Field(
+        default="gemini-embedding-001",
+        description="Модель для эмбеддингов (gemini-embedding-001 или text-embedding-004)",
+    )
     # Webhooks (вместо polling для high load)
     USE_WEBHOOKS: bool = Field(default=False, description="Использовать webhooks вместо polling")
     WEBHOOK_URL: str = Field(default="", description="Полный URL: https://domain.com/webhook")
@@ -147,16 +155,46 @@ IMAGE_SIZES = {
 
 # Персонажи
 PERSONAS = {
-    "teacher": {"name": "Учитель", "prompt": "Ты опытный учитель с многолетним стажем. Перед ответом глубоко размышляй о том, как лучше объяснить материал ученику.\n\nПроцесс размышления:\n1. Анализируй уровень понимания вопроса пользователем\n2. Определяй ключевые концепции\n3. Продумывай структуру объяснения от простого к сложному\n4. Подбирай примеры и аналогии\n\nОтвечай структурированно, с примерами."},
-    "programmer": {"name": "Программист", "prompt": "Ты опытный программист-консультант. Анализируй задачу с технической точки зрения. Отвечай с примерами кода, объясняя выбор решений."},
-    "assistant": {"name": "Помощник", "prompt": "Ты дружелюбный и эффективный помощник. Кратко и по делу."},
-    "creative": {"name": "Креативщик", "prompt": "Ты креативный помощник с богатым воображением. Генерируй идеи и нестандартные решения."},
-    "analyst": {"name": "Аналитик", "prompt": "Ты аналитик данных. Анализируй данные, выявляй паттерны, формулируй выводы на основе фактов."},
-    "translator": {"name": "Переводчик", "prompt": "Ты профессиональный переводчик. Точно передавай смысл, сохраняя стиль."},
-    "writer": {"name": "Писатель", "prompt": "Ты опытный писатель и редактор. Стилистически выверенные тексты."},
-    "scientist": {"name": "Ученый", "prompt": "Ты ученый-консультант. Научный анализ, факты, доказательства."},
-    "business": {"name": "Бизнес-консультант", "prompt": "Ты бизнес-консультант. Стратегические и тактические рекомендации."},
-    "psychologist": {"name": "Психолог", "prompt": "Ты психолог-консультант. Эмпатично и поддерживающе."},
+    "teacher": {
+        "name": "Учитель",
+        "prompt": "Ты опытный учитель с многолетним стажем. Перед ответом глубоко размышляй о том, как лучше объяснить материал ученику.\n\nПроцесс размышления:\n1. Анализируй уровень понимания вопроса пользователем\n2. Определяй ключевые концепции\n3. Продумывай структуру объяснения от простого к сложному\n4. Подбирай примеры и аналогии\n\nОтвечай структурированно, с примерами.",
+    },
+    "programmer": {
+        "name": "Программист",
+        "prompt": "Ты опытный программист-консультант. Анализируй задачу с технической точки зрения. Отвечай с примерами кода, объясняя выбор решений.",
+    },
+    "assistant": {
+        "name": "Помощник",
+        "prompt": "Ты дружелюбный и эффективный помощник. Кратко и по делу.",
+    },
+    "creative": {
+        "name": "Креативщик",
+        "prompt": "Ты креативный помощник с богатым воображением. Генерируй идеи и нестандартные решения.",
+    },
+    "analyst": {
+        "name": "Аналитик",
+        "prompt": "Ты аналитик данных. Анализируй данные, выявляй паттерны, формулируй выводы на основе фактов.",
+    },
+    "translator": {
+        "name": "Переводчик",
+        "prompt": "Ты профессиональный переводчик. Точно передавай смысл, сохраняя стиль.",
+    },
+    "writer": {
+        "name": "Писатель",
+        "prompt": "Ты опытный писатель и редактор. Стилистически выверенные тексты.",
+    },
+    "scientist": {
+        "name": "Ученый",
+        "prompt": "Ты ученый-консультант. Научный анализ, факты, доказательства.",
+    },
+    "business": {
+        "name": "Бизнес-консультант",
+        "prompt": "Ты бизнес-консультант. Стратегические и тактические рекомендации.",
+    },
+    "psychologist": {
+        "name": "Психолог",
+        "prompt": "Ты психолог-консультант. Эмпатично и поддерживающе.",
+    },
 }
 
 # Достижения
