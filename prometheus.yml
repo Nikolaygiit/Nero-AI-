@@ -1,0 +1,8 @@
+# Prometheus — конфигурация для Nero AI
+# Docker compose: targets: ["bot:9090"]
+# Локально: targets: ["localhost:9090"]
+scrape_configs:
+  - job_name: "nero-ai"
+    static_configs:
+      - targets: ["bot:9090"]
+    scrape_interval: 15s

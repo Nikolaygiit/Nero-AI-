@@ -1,0 +1,28 @@
+# Webhooks: полный стек (bot + nginx)
+# Использование: docker compose -f docker-compose.yml -f docker-compose.webhooks.yml up -d
+# Требуется: DOMAIN в .env, сертификаты в ./deploy/certs/
+# Получить сертификаты: sudo certbot certonly --standalone -d your-domain.com
+# Скопировать: cp -rL /etc/letsencrypt ./deploy/certs
+name: nero-ai
+
+services:
+  bot:
+    ports:
+      - "8443:8443"
+    environment:
+      - USE_WEBHOOKS=true
+      - WEBHOOK_URL=https://${DOMAIN:-your-domain.com}
+      - WEBHOOK_PORT=8443
+
+  nginx:
+    image: nginx:alpine
+    container_name: nero-ai-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx-webhook-docker.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/certs:/etc/letsencrypt:ro
+    depends_on:
+      - bot

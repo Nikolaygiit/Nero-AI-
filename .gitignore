@@ -1,0 +1,41 @@
+# Environment variables
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# SSL certificates (deploy webhooks)
+deploy/certs/
+
+# Bot data and logs
+bot_data.json
+bot.log
+bot_backup.py
+bot_database.db
+*.db
+data/
+
+# Test / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

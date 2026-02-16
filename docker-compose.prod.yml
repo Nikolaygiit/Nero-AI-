@@ -1,0 +1,105 @@
+# Продакшен: образ из GitHub Container Registry + Watchtower для автообновления
+# Использование: docker compose -f docker-compose.prod.yml up -d
+#
+# Подставьте свой образ (после первого push в main он появится в Packages):
+# ghcr.io/<owner>/<repo>:latest
+name: nero-ai
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: nero-ai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nero
+      POSTGRES_PASSWORD: nero
+      POSTGRES_DB: nero_ai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nero -d nero_ai"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    ports:
+      - "5432:5432"
+
+  bot:
+    image: ghcr.io/nikolaygiit/nero-ai-:latest
+    container_name: nero-ai-bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://nero:nero@postgres:5432/nero_ai
+    volumes:
+      - ./bot_database.db:/app/bot_database.db
+      - ./bot.log:/app/bot.log
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  worker:
+    image: ghcr.io/nikolaygiit/nero-ai-:latest
+    container_name: nero-ai-worker
+    restart: unless-stopped
+    command: python -m tasks.worker
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://nero:nero@postgres:5432/nero_ai
+    volumes:
+      - ./bot_database.db:/app/bot_database.db
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    container_name: nero-ai-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  admin:
+    image: ghcr.io/nikolaygiit/nero-ai-:latest
+    container_name: nero-ai-admin
+    restart: unless-stopped
+    command: streamlit run admin/app.py --server.port=8501 --server.address=0.0.0.0
+    env_file: .env
+    environment:
+      - DATABASE_URL=postgresql://nero:nero@postgres:5432/nero_ai
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./bot_database.db:/app/bot_database.db
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Watchtower: подтягивает новый образ и перезапускает контейнеры
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: nero-ai-watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_POLL_INTERVAL=300
+      - WATCHTOWER_CLEANUP=true
+    command: --interval 300
+
+volumes:
+  redis_data:
+  postgres_data:

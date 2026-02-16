@@ -1,0 +1,11 @@
+# Простая конфигурация: бот + сохранение базы
+name: nero-ai
+
+services:
+  bot:
+    image: nero-ai-bot
+    build: .
+    restart: always
+    env_file: .env
+    volumes:
+      - ./bot_database.db:/app/bot_database.db  # База не стирается при обновлении
