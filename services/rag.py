@@ -61,33 +61,42 @@ async def _embed_texts(texts: List[str]) -> List[List[float]]:
     # Некоторые API принимают только один input; делаем батчи по 1 для совместимости
     all_embeddings: List[List[float]] = []
     batch_size = 20
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i : i + batch_size]
+
+    batches = [texts[i : i + batch_size] for i in range(0, len(texts), batch_size)]
+
+    async def process_batch(client: httpx.AsyncClient, batch: List[str]) -> List[List[float]]:
         # Стандарт: input может быть строкой или массивом строк
         body = {
             "model": config.RAG_EMBEDDING_MODEL,
             "input": batch[0] if len(batch) == 1 else batch,
         }
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(url, headers=headers, json=body)
-                if resp.status_code != 200:
-                    err = resp.text
-                    logger.warning("Embeddings API error: %s", err[:200])
-                    raise RuntimeError(f"Embeddings API: {resp.status_code} {err[:200]}")
-                data = resp.json()
-                items = data.get("data", [])
-                if not items:
-                    raise RuntimeError("Embeddings API вернул пустой data")
-                # Сортируем по index на случай неупорядоченного ответа
-                items_sorted = sorted(items, key=lambda x: x.get("index", 0))
-                for it in items_sorted:
-                    emb = it.get("embedding")
-                    if emb is not None:
-                        all_embeddings.append(emb)
+            resp = await client.post(url, headers=headers, json=body)
+            if resp.status_code != 200:
+                err = resp.text
+                logger.warning("Embeddings API error: %s", err[:200])
+                raise RuntimeError(f"Embeddings API: {resp.status_code} {err[:200]}")
+            data = resp.json()
+            items = data.get("data", [])
+            if not items:
+                raise RuntimeError("Embeddings API вернул пустой data")
+            # Сортируем по index на случай неупорядоченного ответа
+            items_sorted = sorted(items, key=lambda x: x.get("index", 0))
+            batch_embeddings = []
+            for it in items_sorted:
+                emb = it.get("embedding")
+                if emb is not None:
+                    batch_embeddings.append(emb)
+            return batch_embeddings
         except Exception as e:
             logger.exception("Embeddings request failed: %s", e)
             raise
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        results = await asyncio.gather(*(process_batch(client, batch) for batch in batches))
+        for res in results:
+            all_embeddings.extend(res)
+
     return all_embeddings
 
 
