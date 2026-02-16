@@ -1,8 +1,10 @@
-import pytest
-import asyncio
 import os
+
+import pytest
+
 from database.db import db
 from database.models import User
+
 
 @pytest.mark.asyncio
 async def test_get_all_telegram_ids_chunks():
