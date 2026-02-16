@@ -79,12 +79,13 @@ jobs:
 
       - name: Set image name (sanitize: no trailing hyphen for Docker)
         id: image
+        env:
+          REPO: ${{ github.repository }}
         run: |
-          name="${{ github.repository }}"
-          name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
+          name_lower=$(echo "$REPO" | tr '[:upper:]' '[:lower:]')
           name_trimmed=$(echo "$name_lower" | sed 's/-*$//')
           echo "name=${name_trimmed}" >> $GITHUB_OUTPUT
-          echo "Image: ${{ env.REGISTRY }}/${name_trimmed}"
+          echo "Image=${{ env.REGISTRY }}/${name_trimmed}"
 
       - name: Extract metadata (tags, labels)
         id: meta
