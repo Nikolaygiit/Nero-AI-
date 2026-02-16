@@ -1,7 +1,6 @@
 """
 Базовые тесты для бота
 """
-import asyncio
 import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -13,7 +12,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from database import db  # noqa: E402
 from services.gemini import GeminiService  # noqa: E402
-from services.image_gen import ImageGenerator  # noqa: E402
 
 
 @pytest.mark.asyncio
@@ -29,18 +27,18 @@ async def test_database_init():
 async def test_create_user():
     """Тест создания пользователя"""
     await db.init()
-    
+
     try:
         user = await db.create_or_update_user(
             telegram_id=12345,
             username="test_user",
             first_name="Test"
         )
-        
+
         assert user is not None
         assert user.telegram_id == 12345
         assert user.username == "test_user"
-        
+
         # Проверяем получение пользователя
         retrieved_user = await db.get_user(12345)
         assert retrieved_user is not None
@@ -53,15 +51,15 @@ async def test_create_user():
 async def test_add_message():
     """Тест добавления сообщения"""
     await db.init()
-    
+
     try:
         # Создаем пользователя
         await db.create_or_update_user(telegram_id=12345)
-        
+
         # Добавляем сообщение
         await db.add_message(12345, "user", "Привет!")
         await db.add_message(12345, "assistant", "Привет! Как дела?")
-        
+
         # Получаем сообщения
         messages = await db.get_user_messages(12345, limit=10)
         assert len(messages) == 2
@@ -76,15 +74,15 @@ async def test_add_message():
 async def test_update_stats():
     """Тест обновления статистики"""
     await db.init()
-    
+
     try:
         # Создаем пользователя
         await db.create_or_update_user(telegram_id=12345)
-        
+
         # Обновляем статистику
         await db.update_stats(12345, requests_count=1, tokens_used=100)
         await db.update_stats(12345, command='start')
-        
+
         # Проверяем статистику
         stats = await db.get_stats(12345)
         assert stats is not None
@@ -107,13 +105,13 @@ async def test_gemini_service_list_models():
             ]
         }
         mock_response.raise_for_status = MagicMock()
-        
+
         mock_client_instance = AsyncMock()
         mock_client_instance.__aenter__.return_value = mock_client_instance
         mock_client_instance.__aexit__.return_value = None
         mock_client_instance.get.return_value = mock_response
         mock_client.return_value = mock_client_instance
-        
+
         async with GeminiService() as service:
             models = await service.list_available_models()
             assert len(models) > 0
@@ -123,13 +121,13 @@ async def test_gemini_service_list_models():
 async def test_rate_limit_middleware():
     """Тест rate limiting middleware"""
     from middlewares.rate_limit import RateLimitMiddleware
-    
+
     middleware = RateLimitMiddleware(max_requests=2, time_window=60)
-    
+
     # Первые два запроса должны пройти
     assert await middleware.check_rate_limit(12345) is True
     assert await middleware.check_rate_limit(12345) is True
-    
+
     # Третий запрос должен быть заблокирован
     assert await middleware.check_rate_limit(12345) is False
 
