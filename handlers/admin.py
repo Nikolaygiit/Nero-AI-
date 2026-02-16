@@ -33,23 +33,24 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        telegram_ids = await db.get_all_telegram_ids()
+        users_count = await db.get_users_count()
         success = 0
         failed = 0
 
-        status_msg = await update.message.reply_text(f"📤 Рассылка {len(telegram_ids)} пользователям...")
+        status_msg = await update.message.reply_text(f"📤 Рассылка {users_count} пользователям...")
 
-        for tg_id in telegram_ids:
-            try:
-                await context.bot.send_message(
-                    chat_id=tg_id,
-                    text=f"📢 **Объявление:**\n\n{text}",
-                    parse_mode=ParseMode.MARKDOWN
-                )
-                success += 1
-            except Exception as e:
-                failed += 1
-                logger.warning(f"Broadcast failed for {tg_id}: {e}")
+        async for chunk in db.get_all_telegram_ids():
+            for tg_id in chunk:
+                try:
+                    await context.bot.send_message(
+                        chat_id=tg_id,
+                        text=f"📢 **Объявление:**\n\n{text}",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    success += 1
+                except Exception as e:
+                    failed += 1
+                    logger.warning(f"Broadcast failed for {tg_id}: {e}")
 
         await status_msg.edit_text(
             f"✅ Рассылка завершена!\n\n"

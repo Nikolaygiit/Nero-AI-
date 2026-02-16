@@ -2,7 +2,7 @@
 Работа с базой данных SQLite через aiosqlite
 """
 import json
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, AsyncIterator
 from datetime import datetime
 from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import (
@@ -68,11 +68,12 @@ class Database:
             )
             return result.scalar_one_or_none()
 
-    async def get_all_telegram_ids(self) -> List[int]:
-        """Получить все telegram_id пользователей (для рассылки)"""
+    async def get_all_telegram_ids(self, chunk_size: int = 1000) -> AsyncIterator[List[int]]:
+        """Получить все telegram_id пользователей пачками (для рассылки)"""
         async with self.async_session() as session:
-            result = await session.execute(select(User.telegram_id))
-            return [row[0] for row in result.all()]
+            result = await session.stream(select(User.telegram_id))
+            async for partition in result.partitions(chunk_size):
+                yield [row[0] for row in partition]
 
     async def get_users_count(self) -> int:
         """Получить количество пользователей"""
