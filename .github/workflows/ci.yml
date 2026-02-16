@@ -77,11 +77,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set image name (sanitize: no trailing hyphen for Docker)
+        id: image
+        run: |
+          name="${{ github.repository }}"
+          name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
+          name_trimmed=$(echo "$name_lower" | sed 's/-*$//')
+          echo "name=${name_trimmed}" >> $GITHUB_OUTPUT
+          echo "Image: ${{ env.REGISTRY }}/${name_trimmed}"
+
       - name: Extract metadata (tags, labels)
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}
+          images: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=sha,prefix=
