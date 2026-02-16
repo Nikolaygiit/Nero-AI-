@@ -1,12 +1,19 @@
 """
 Базовые тесты для бота
 """
-import pytest
 import asyncio
+import os
+import sys
 from unittest.mock import AsyncMock, MagicMock, patch
-from database import db
-from services.gemini import GeminiService
-from services.image_gen import ImageGenerator
+
+import pytest
+
+# Add the project root to sys.path to allow importing handlers
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from database import db  # noqa: E402
+from services.gemini import GeminiService  # noqa: E402
+from services.image_gen import ImageGenerator  # noqa: E402
 
 
 @pytest.mark.asyncio
