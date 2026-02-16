@@ -1,6 +1,7 @@
 """
 Alembic env — подключение к SQLite через синхронный движок (для миграций)
 """
+
 import asyncio
 from logging.config import fileConfig
 
@@ -9,7 +10,6 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
-
 from database.models import Base
 
 config = context.config

@@ -1,6 +1,7 @@
-import unittest
 import sys
+import unittest
 from unittest.mock import MagicMock, patch
+
 
 class TestAnalytics(unittest.TestCase):
     @classmethod
@@ -19,31 +20,35 @@ class TestAnalytics(unittest.TestCase):
         cls.mock_config.settings = cls.mock_settings
 
         # Patch sys.modules to redirect imports to our mocks
-        cls.module_patcher = patch.dict(sys.modules, {
-            'config': cls.mock_config,
-            'httpx': cls.mock_httpx,
-            'pydantic': cls.mock_pydantic,
-            'pydantic_settings': cls.mock_pydantic_settings,
-            'telegram': cls.mock_telegram,
-            'telegram.ext': cls.mock_telegram_ext,
-            'telegram.error': cls.mock_telegram_error,
-        })
+        cls.module_patcher = patch.dict(
+            sys.modules,
+            {
+                "config": cls.mock_config,
+                "httpx": cls.mock_httpx,
+                "pydantic": cls.mock_pydantic,
+                "pydantic_settings": cls.mock_pydantic_settings,
+                "telegram": cls.mock_telegram,
+                "telegram.ext": cls.mock_telegram_ext,
+                "telegram.error": cls.mock_telegram_error,
+            },
+        )
         cls.module_patcher.start()
 
         # Remove utils.analytics from sys.modules to force reload with mocks
-        if 'utils.analytics' in sys.modules:
-            del sys.modules['utils.analytics']
+        if "utils.analytics" in sys.modules:
+            del sys.modules["utils.analytics"]
 
         # Import the module under test
         import utils.analytics
+
         cls.analytics = utils.analytics
 
     @classmethod
     def tearDownClass(cls):
         cls.module_patcher.stop()
         # Clean up imported module
-        if 'utils.analytics' in sys.modules:
-            del sys.modules['utils.analytics']
+        if "utils.analytics" in sys.modules:
+            del sys.modules["utils.analytics"]
 
     def setUp(self):
         self.mock_httpx.reset_mock()
@@ -67,15 +72,18 @@ class TestAnalytics(unittest.TestCase):
         self.mock_httpx.post.assert_called_once()
         args, kwargs = self.mock_httpx.post.call_args
         self.assertEqual(args[0], "https://test.posthog.com/capture/")
-        self.assertEqual(kwargs['json'], {
-            "api_key": "test_key",
-            "event": "test_event",
-            "distinct_id": "user123",
-            "properties": properties,
-        })
+        self.assertEqual(
+            kwargs["json"],
+            {
+                "api_key": "test_key",
+                "event": "test_event",
+                "distinct_id": "user123",
+                "properties": properties,
+            },
+        )
         # Check timeout is passed
-        self.assertIn('timeout', kwargs)
-        self.assertEqual(kwargs['timeout'], 2.0)
+        self.assertIn("timeout", kwargs)
+        self.assertEqual(kwargs["timeout"], 2.0)
 
     def test_track_error_handling(self):
         """Test that exceptions during tracking are suppressed"""
@@ -92,5 +100,6 @@ class TestAnalytics(unittest.TestCase):
 
         self.mock_httpx.post.assert_called_once()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()
