@@ -1,54 +1,59 @@
 import sys
 import unittest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
 
 class TestMediaHandler(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls):
         # Create a dictionary of mocks for sys.modules to bypass import errors
-        cls.module_patcher = patch.dict(sys.modules, {
-            'telegram': MagicMock(),
-            'telegram.error': MagicMock(),
-            'telegram.constants': MagicMock(),
-            'telegram.ext': MagicMock(),
-            'structlog': MagicMock(),
-            'sqlalchemy': MagicMock(),
-            'httpx': MagicMock(),
-            'pydantic': MagicMock(),
-            'pydantic_settings': MagicMock(),
-            'database': MagicMock(),
-            'services.gemini': MagicMock(),
-            'services.speech': MagicMock(),
-            'services.image_gen': MagicMock(),
-            'services.rag': MagicMock(),
-            'services.memory': MagicMock(),
-            'middlewares.rate_limit': MagicMock(),
-            'middlewares.usage_limit': MagicMock(),
-            'utils.text_tools': MagicMock(),
-            'utils.analytics': MagicMock(),
-            'config': MagicMock(),
-            'handlers.chat': MagicMock(),
-            'handlers.callbacks': MagicMock(),
-            'handlers.commands': MagicMock(),
-            'handlers.admin': MagicMock(),
-            'handlers.documents': MagicMock(),
-        })
+        cls.module_patcher = patch.dict(
+            sys.modules,
+            {
+                "telegram": MagicMock(),
+                "telegram.error": MagicMock(),
+                "telegram.constants": MagicMock(),
+                "telegram.ext": MagicMock(),
+                "structlog": MagicMock(),
+                "sqlalchemy": MagicMock(),
+                "httpx": MagicMock(),
+                "pydantic": MagicMock(),
+                "pydantic_settings": MagicMock(),
+                "database": MagicMock(),
+                "services.gemini": MagicMock(),
+                "services.speech": MagicMock(),
+                "services.image_gen": MagicMock(),
+                "services.rag": MagicMock(),
+                "services.memory": MagicMock(),
+                "middlewares.rate_limit": MagicMock(),
+                "middlewares.usage_limit": MagicMock(),
+                "utils.text_tools": MagicMock(),
+                "utils.analytics": MagicMock(),
+                "config": MagicMock(),
+                "handlers.chat": MagicMock(),
+                "handlers.callbacks": MagicMock(),
+                "handlers.commands": MagicMock(),
+                "handlers.admin": MagicMock(),
+                "handlers.documents": MagicMock(),
+            },
+        )
         cls.module_patcher.start()
 
         # Now import the handler
         # We need to make sure handlers.media is reloaded if it was already imported
-        if 'handlers.media' in sys.modules:
-            del sys.modules['handlers.media']
+        if "handlers.media" in sys.modules:
+            del sys.modules["handlers.media"]
 
         import handlers.media
+
         cls.handler_module = handlers.media
 
     @classmethod
     def tearDownClass(cls):
         cls.module_patcher.stop()
         # Clean up to avoid affecting other tests
-        if 'handlers.media' in sys.modules:
-            del sys.modules['handlers.media']
+        if "handlers.media" in sys.modules:
+            del sys.modules["handlers.media"]
 
     async def test_handle_photo_generation_trigger(self):
         """
@@ -84,10 +89,19 @@ class TestMediaHandler(unittest.IsolatedAsyncioTestCase):
         context.bot.get_file = AsyncMock(return_value=file_mock)
 
         # We need to patch the objects as they exist in the imported module
-        with patch.object(self.handler_module.rate_limit_middleware, 'check_rate_limit', new_callable=AsyncMock) as mock_rate_limit, \
-             patch.object(self.handler_module, 'check_can_make_request', new_callable=AsyncMock) as mock_check_usage, \
-             patch.object(self.handler_module.gemini_service, 'analyze_image', new_callable=AsyncMock) as mock_analyze:
-
+        with (
+            patch.object(
+                self.handler_module.rate_limit_middleware,
+                "check_rate_limit",
+                new_callable=AsyncMock,
+            ) as mock_rate_limit,
+            patch.object(
+                self.handler_module, "check_can_make_request", new_callable=AsyncMock
+            ) as mock_check_usage,
+            patch.object(
+                self.handler_module.gemini_service, "analyze_image", new_callable=AsyncMock
+            ) as mock_analyze,
+        ):
             mock_rate_limit.return_value = True
             mock_check_usage.return_value = (True, None)
 
@@ -95,7 +109,9 @@ class TestMediaHandler(unittest.IsolatedAsyncioTestCase):
             await handle_photo(update, context)
 
             # Verify
-            message.reply_text.assert_called_with("⚠️ Генерация изображений на основе фото пока не реализована")
+            message.reply_text.assert_called_with(
+                "⚠️ Генерация изображений на основе фото пока не реализована"
+            )
             mock_analyze.assert_not_called()
 
     async def test_handle_photo_analysis_trigger(self):
@@ -136,12 +152,23 @@ class TestMediaHandler(unittest.IsolatedAsyncioTestCase):
         context.bot.get_file = AsyncMock(return_value=file_mock)
 
         # Configure patches
-        with patch.object(self.handler_module.rate_limit_middleware, 'check_rate_limit', new_callable=AsyncMock) as mock_rate_limit, \
-             patch.object(self.handler_module, 'check_can_make_request', new_callable=AsyncMock) as mock_check_usage, \
-             patch.object(self.handler_module.gemini_service, 'analyze_image', new_callable=AsyncMock) as mock_analyze, \
-             patch.object(self.handler_module, 'sanitize_markdown', return_value="Sanitized Analysis"), \
-             patch.object(self.handler_module, 'track'):
-
+        with (
+            patch.object(
+                self.handler_module.rate_limit_middleware,
+                "check_rate_limit",
+                new_callable=AsyncMock,
+            ) as mock_rate_limit,
+            patch.object(
+                self.handler_module, "check_can_make_request", new_callable=AsyncMock
+            ) as mock_check_usage,
+            patch.object(
+                self.handler_module.gemini_service, "analyze_image", new_callable=AsyncMock
+            ) as mock_analyze,
+            patch.object(
+                self.handler_module, "sanitize_markdown", return_value="Sanitized Analysis"
+            ),
+            patch.object(self.handler_module, "track"),
+        ):
             mock_rate_limit.return_value = True
             mock_check_usage.return_value = (True, None)
             mock_analyze.return_value = "Analysis Result"

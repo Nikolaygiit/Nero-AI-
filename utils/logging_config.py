@@ -2,9 +2,11 @@
 Централизованная настройка логирования через structlog
 Структурированные логи в формате JSON для анализа и построения графиков
 """
+
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
+
 import structlog
 
 LOG_FILE = "bot.log"
@@ -24,7 +26,7 @@ def setup_logging(level: int = logging.INFO) -> None:
         stream=sys.stdout,
         level=level,
     )
-    
+
     # Файловый обработчик с ротацией (JSON)
     file_handler = RotatingFileHandler(
         LOG_FILE,
@@ -33,11 +35,11 @@ def setup_logging(level: int = logging.INFO) -> None:
         encoding=ENCODING,
     )
     file_handler.setLevel(level)
-    
+
     # Консольный обработчик (читаемый формат)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(level)
-    
+
     # Настраиваем structlog с JSON для всех (файл и консоль)
     # Для консоли можно использовать structlog.dev.ConsoleRenderer, но проще оставить JSON
     # и парсить при необходимости, или использовать отдельный форматтер
@@ -57,7 +59,7 @@ def setup_logging(level: int = logging.INFO) -> None:
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
-    
+
     # Добавляем обработчики к root logger
     root_logger = logging.getLogger()
     root_logger.handlers.clear()
@@ -67,23 +69,31 @@ def setup_logging(level: int = logging.INFO) -> None:
     # Уменьшаем шум: HTTP-запросы telegram/httpx только при необходимости
     for name in ("httpx", "httpcore", "telegram"):
         logging.getLogger(name).setLevel(logging.WARNING)
-    
+
     # Для консоли используем форматтер, который преобразует JSON в читаемый вид
     class ReadableFormatter(logging.Formatter):
         """Форматтер для читаемого вывода в консоль из JSON"""
+
         def format(self, record):
             msg = record.getMessage()
             # Если это JSON строка, форматируем читаемо
             if msg.startswith("{") and msg.endswith("}"):
                 try:
                     import json
+
                     data = json.loads(msg)
                     parts = []
                     if "timestamp" in data:
                         ts = data["timestamp"].replace("T", " ").replace("Z", "")[:19]
                         parts.append(f"[{ts}]")
                     if "level" in data:
-                        level_map = {"INFO": "INFO", "DEBUG": "DEBUG", "WARNING": "WARN", "ERROR": "ERROR", "CRITICAL": "CRIT"}
+                        level_map = {
+                            "INFO": "INFO",
+                            "DEBUG": "DEBUG",
+                            "WARNING": "WARN",
+                            "ERROR": "ERROR",
+                            "CRITICAL": "CRIT",
+                        }
                         parts.append(f"{level_map.get(data['level'], data['level'])}")
                     if "logger" in data:
                         parts.append(f"{data['logger']}")
@@ -100,5 +110,5 @@ def setup_logging(level: int = logging.INFO) -> None:
                 except Exception:
                     pass
             return msg
-    
+
     console_handler.setFormatter(ReadableFormatter())
