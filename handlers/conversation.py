@@ -2,8 +2,10 @@
 Интерактивное меню — ConversationHandler (FSM)
 Пошаговые сценарии: настройки, выбор персонажа
 """
+
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ContextTypes,
     ConversationHandler,
@@ -54,7 +56,9 @@ async def wizard_persona_callback(update: Update, context: ContextTypes.DEFAULT_
             context.user_data["wizard_persona"] = persona
             await db.create_or_update_user(telegram_id=query.from_user.id, persona=persona)
             name = config.PERSONAS[persona]["name"]
-            await query.edit_message_text(f"✅ Персонаж: **{name}**\n\nНастройка завершена!", parse_mode="Markdown")
+            await query.edit_message_text(
+                f"✅ Персонаж: **{name}**\n\nНастройка завершена!", parse_mode="Markdown"
+            )
             return ConversationHandler.END
     return CHOOSE_PERSONA
 
@@ -67,7 +71,8 @@ async def wizard_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 def get_wizard_conversation_handler() -> ConversationHandler:
     """ConversationHandler для /wizard — пошаговая настройка"""
-    from telegram.ext import CommandHandler, CallbackQueryHandler
+    from telegram.ext import CallbackQueryHandler, CommandHandler
+
     return ConversationHandler(
         entry_points=[CommandHandler("wizard", wizard_start)],
         states={

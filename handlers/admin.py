@@ -1,13 +1,16 @@
 """
 Админ-панель: /broadcast, /users, /logs
 """
+
 import logging
 from pathlib import Path
+
 from telegram import Update
-from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
-from database import db
+from telegram.ext import ContextTypes
+
 import config
+from database import db
 
 logger = logging.getLogger(__name__)
 
@@ -37,14 +40,16 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         success = 0
         failed = 0
 
-        status_msg = await update.message.reply_text(f"📤 Рассылка {len(telegram_ids)} пользователям...")
+        status_msg = await update.message.reply_text(
+            f"📤 Рассылка {len(telegram_ids)} пользователям..."
+        )
 
         for tg_id in telegram_ids:
             try:
                 await context.bot.send_message(
                     chat_id=tg_id,
                     text=f"📢 **Объявление:**\n\n{text}",
-                    parse_mode=ParseMode.MARKDOWN
+                    parse_mode=ParseMode.MARKDOWN,
                 )
                 success += 1
             except Exception as e:
@@ -52,9 +57,7 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.warning(f"Broadcast failed for {tg_id}: {e}")
 
         await status_msg.edit_text(
-            f"✅ Рассылка завершена!\n\n"
-            f"Доставлено: {success}\n"
-            f"Не доставлено: {failed}"
+            f"✅ Рассылка завершена!\n\nДоставлено: {success}\nНе доставлено: {failed}"
         )
     except Exception as e:
         logger.error(f"Broadcast error: {e}")
@@ -71,9 +74,8 @@ async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         count = await db.get_users_count()
         await update.message.reply_text(
-            f"👥 **Статистика бота:**\n\n"
-            f"Всего пользователей: {count}",
-            parse_mode=ParseMode.MARKDOWN
+            f"👥 **Статистика бота:**\n\nВсего пользователей: {count}",
+            parse_mode=ParseMode.MARKDOWN,
         )
     except Exception as e:
         logger.error(f"Users command error: {e}")
@@ -105,9 +107,7 @@ async def logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         with open(temp_log, "rb") as f:
             await update.message.reply_document(
-                document=f,
-                filename="bot_logs.txt",
-                caption="📋 Последние логи бота"
+                document=f, filename="bot_logs.txt", caption="📋 Последние логи бота"
             )
         temp_log.unlink(missing_ok=True)
     except Exception as e:
