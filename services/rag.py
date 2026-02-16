@@ -6,12 +6,12 @@ import asyncio
 import hashlib
 import logging
 import re
+from io import BytesIO
 from pathlib import Path
 from typing import List, Optional
 
 import httpx
 from pypdf import PdfReader
-from io import BytesIO
 
 import config
 
@@ -193,11 +193,9 @@ async def get_rag_context(user_id: int, query: str, top_k: int = RAG_TOP_K) -> O
     if not result or not result.get("documents") or not result["documents"][0]:
         return None
     docs = result["documents"][0]
-    distances = result.get("distances", [[]])[0] if result.get("distances") else []
     # ChromaDB по умолчанию L2: меньше = ближе. Нормализуем в условную «релевантность»
     chosen = []
     for i, doc in enumerate(docs):
-        d = distances[i] if i < len(distances) else 0
         # Простой порог: если расстояние очень большое, не брать (зависит от метрики)
         chosen.append(doc)
     if not chosen:

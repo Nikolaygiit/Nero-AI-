@@ -1,7 +1,7 @@
-import unittest
-from unittest.mock import MagicMock, AsyncMock, patch, ANY
 import sys
-import importlib
+import unittest
+from unittest.mock import AsyncMock, MagicMock, patch
+
 
 class TestRandomCommand(unittest.IsolatedAsyncioTestCase):
     @classmethod
@@ -14,8 +14,11 @@ class TestRandomCommand(unittest.IsolatedAsyncioTestCase):
 
         # Mock telegram.error.NetworkError
         cls.mock_telegram_error = MagicMock()
+
         # It must be a class inheriting from Exception
-        class NetworkError(Exception): pass
+        class NetworkError(Exception):
+            pass
+
         cls.mock_telegram_error.NetworkError = NetworkError
 
         cls.mock_database = MagicMock()
