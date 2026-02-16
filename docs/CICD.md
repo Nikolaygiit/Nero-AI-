@@ -1,5 +1,18 @@
 # CI/CD и деплой на сервер
 
+## Первый push в GitHub
+
+1. Создайте репозиторий на GitHub (без README и .gitignore — они уже есть).
+2. Подключите remote и запушьте (подставьте свой URL):
+
+```bash
+git remote add origin https://github.com/<USER>/<REPO>.git
+git branch -M main
+git push -u origin main
+```
+
+CI запустится на push: lint, тесты, при успехе — сборка и публикация образа в GHCR.
+
 ## Что делает GitHub Actions
 
 При **push** или **pull request** в ветку `main`:
