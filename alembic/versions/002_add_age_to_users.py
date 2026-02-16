@@ -6,6 +6,7 @@ Create Date: 2025-02-02
 
 Пример: добавление поля "возраст" пользователю без удаления БД.
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa

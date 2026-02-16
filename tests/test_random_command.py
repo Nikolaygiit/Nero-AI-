@@ -50,39 +50,43 @@ class TestRandomCommand(unittest.IsolatedAsyncioTestCase):
         cls.mock_structlog = MagicMock()
 
         # Modules to patch
-        cls.modules_patcher = patch.dict(sys.modules, {
-            'telegram': cls.mock_telegram,
-            'telegram.ext': cls.mock_telegram.ext,
-            'httpx': cls.mock_httpx,
-            'sqlalchemy': cls.mock_sqlalchemy,
-            'pydantic': cls.mock_pydantic,
-            'structlog': cls.mock_structlog,
-            'telegram.error': cls.mock_telegram_error,
-            'database': cls.mock_database,
-            'services.gemini': cls.mock_gemini,
-            'services.image_gen': cls.mock_image_gen,
-            'services.rag': cls.mock_rag,
-            'middlewares.rate_limit': cls.mock_rate_limit,
-            'utils.i18n': cls.mock_i18n,
-            'config': cls.mock_config,
-            'tasks': cls.mock_tasks,
-            'tasks.image_tasks': cls.mock_tasks,
-            'tasks.broker': cls.mock_tasks,
-        })
+        cls.modules_patcher = patch.dict(
+            sys.modules,
+            {
+                "telegram": cls.mock_telegram,
+                "telegram.ext": cls.mock_telegram.ext,
+                "httpx": cls.mock_httpx,
+                "sqlalchemy": cls.mock_sqlalchemy,
+                "pydantic": cls.mock_pydantic,
+                "structlog": cls.mock_structlog,
+                "telegram.error": cls.mock_telegram_error,
+                "database": cls.mock_database,
+                "services.gemini": cls.mock_gemini,
+                "services.image_gen": cls.mock_image_gen,
+                "services.rag": cls.mock_rag,
+                "middlewares.rate_limit": cls.mock_rate_limit,
+                "utils.i18n": cls.mock_i18n,
+                "config": cls.mock_config,
+                "tasks": cls.mock_tasks,
+                "tasks.image_tasks": cls.mock_tasks,
+                "tasks.broker": cls.mock_tasks,
+            },
+        )
         cls.modules_patcher.start()
 
         # Ensure handlers.commands is imported with mocks
-        if 'handlers.commands' in sys.modules:
-            del sys.modules['handlers.commands']
+        if "handlers.commands" in sys.modules:
+            del sys.modules["handlers.commands"]
 
         import handlers.commands
+
         cls.handlers_commands = handlers.commands
 
     @classmethod
     def tearDownClass(cls):
         cls.modules_patcher.stop()
-        if 'handlers.commands' in sys.modules:
-            del sys.modules['handlers.commands']
+        if "handlers.commands" in sys.modules:
+            del sys.modules["handlers.commands"]
 
     async def asyncSetUp(self):
         # Reset mocks before each test
@@ -106,7 +110,7 @@ class TestRandomCommand(unittest.IsolatedAsyncioTestCase):
         """Test /random number [min] [max]"""
         self.context.args = ["number", "10", "20"]
 
-        with patch('random.randint') as mock_randint:
+        with patch("random.randint") as mock_randint:
             mock_randint.return_value = 15
             await self.handlers_commands.random_command(self.update, self.context)
 
@@ -114,13 +118,13 @@ class TestRandomCommand(unittest.IsolatedAsyncioTestCase):
             self.update.message.reply_text.assert_called_once()
             args, _ = self.update.message.reply_text.call_args
             self.assertIn("15", args[0])
-            self.mock_database.db.update_stats.assert_called_with(12345, command='random')
+            self.mock_database.db.update_stats.assert_called_with(12345, command="random")
 
     async def test_random_choice(self):
         """Test /random choice [item1] [item2]"""
         self.context.args = ["choice", "apple", "banana"]
 
-        with patch('random.choice') as mock_choice:
+        with patch("random.choice") as mock_choice:
             mock_choice.return_value = "apple"
             await self.handlers_commands.random_command(self.update, self.context)
 
@@ -128,13 +132,13 @@ class TestRandomCommand(unittest.IsolatedAsyncioTestCase):
             self.update.message.reply_text.assert_called_once()
             args, _ = self.update.message.reply_text.call_args
             self.assertIn("apple", args[0])
-            self.mock_database.db.update_stats.assert_called_with(12345, command='random')
+            self.mock_database.db.update_stats.assert_called_with(12345, command="random")
 
     async def test_random_coin(self):
         """Test /random coin"""
         self.context.args = ["coin"]
 
-        with patch('random.choice') as mock_choice:
+        with patch("random.choice") as mock_choice:
             mock_choice.return_value = "Орел"
             await self.handlers_commands.random_command(self.update, self.context)
 
@@ -142,13 +146,13 @@ class TestRandomCommand(unittest.IsolatedAsyncioTestCase):
             self.update.message.reply_text.assert_called_once()
             args, _ = self.update.message.reply_text.call_args
             self.assertIn("Орел", args[0])
-            self.mock_database.db.update_stats.assert_called_with(12345, command='random')
+            self.mock_database.db.update_stats.assert_called_with(12345, command="random")
 
     async def test_random_dice(self):
         """Test /random dice"""
         self.context.args = ["dice"]
 
-        with patch('random.randint') as mock_randint:
+        with patch("random.randint") as mock_randint:
             mock_randint.return_value = 4
             await self.handlers_commands.random_command(self.update, self.context)
 
@@ -156,7 +160,7 @@ class TestRandomCommand(unittest.IsolatedAsyncioTestCase):
             self.update.message.reply_text.assert_called_once()
             args, _ = self.update.message.reply_text.call_args
             self.assertIn("4", args[0])
-            self.mock_database.db.update_stats.assert_called_with(12345, command='random')
+            self.mock_database.db.update_stats.assert_called_with(12345, command="random")
 
     async def test_random_invalid_action(self):
         """Test /random with invalid action"""
@@ -171,7 +175,7 @@ class TestRandomCommand(unittest.IsolatedAsyncioTestCase):
 
     async def test_random_number_missing_args(self):
         """Test /random number without enough args"""
-        self.context.args = ["number", "10"] # Missing max
+        self.context.args = ["number", "10"]  # Missing max
         # The code checks `len(context.args) >= 3` for number
         # If not met, it falls to `else` block (which says "Invalid format")?
         # Let's check the code:
@@ -187,7 +191,7 @@ class TestRandomCommand(unittest.IsolatedAsyncioTestCase):
 
     async def test_random_exception(self):
         """Test exception handling in random_command"""
-        self.context.args = ["number", "invalid", "invalid"] # int() will raise ValueError
+        self.context.args = ["number", "invalid", "invalid"]  # int() will raise ValueError
 
         await self.handlers_commands.random_command(self.update, self.context)
 
@@ -196,5 +200,6 @@ class TestRandomCommand(unittest.IsolatedAsyncioTestCase):
         args, _ = self.update.message.reply_text.call_args
         self.assertIn("Ошибка:", args[0])
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()
