@@ -1,55 +1,62 @@
+
 import sys
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-# 1. Mock dependencies
-mock_httpx = MagicMock()
-sys.modules["httpx"] = mock_httpx
 
-# Define exceptions on the mock so they can be caught
-class MockTimeoutException(Exception): pass
-mock_httpx.TimeoutException = MockTimeoutException
-mock_httpx.HTTPError = Exception
-mock_httpx.Limits = MagicMock()
-mock_httpx.Timeout = MagicMock()
+# Define exceptions that need to be available globally for the test
+class MockTimeoutError(Exception):
+    pass
 
-# Mock config
-mock_config = MagicMock()
-mock_config.MODEL_TIMEOUT_SEC = 10
-mock_config.CIRCUIT_FAILURE_THRESHOLD = 3
-mock_config.CIRCUIT_COOLDOWN_SEC = 60
-mock_config.GEMINI_API_BASE = "https://api.artemox.com"
-mock_config.GEMINI_API_KEY = "test_key"
-mock_config.PREFERRED_MODELS = ["gemini-2.0-flash"]
-mock_config.settings.DEEPSEEK_API_KEY = "deepseek_key"
-mock_config.settings.OPENAI_API_KEY = "openai_key"
-sys.modules["config"] = mock_config
-
-# Mock sqlalchemy
-sys.modules["sqlalchemy"] = MagicMock()
-sys.modules["sqlalchemy.ext.asyncio"] = MagicMock()
-sys.modules["sqlalchemy.orm"] = MagicMock()
-
-# Mock database
-sys.modules["database"] = MagicMock()
-
-# Mock sibling services and other dependencies to prevent deep imports
-sys.modules["services.gemini"] = MagicMock()
-sys.modules["services.image_gen"] = MagicMock()
-sys.modules["services.rag"] = MagicMock()
-sys.modules["services.memory"] = MagicMock()
-sys.modules["services.speech"] = MagicMock()
-sys.modules["google.generativeai"] = MagicMock()
-
-# 2. Import target module
-from services.llm_cascade import _chat_completion_request, LLMProvider
-
-import pytest
-
-@pytest.mark.asyncio
 class TestLLMCascadeRefactor(unittest.IsolatedAsyncioTestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Create mocks
+        cls.mock_httpx = MagicMock()
+        cls.mock_httpx.TimeoutException = MockTimeoutError
+        cls.mock_httpx.HTTPError = Exception
+        cls.mock_httpx.Limits = MagicMock()
+        cls.mock_httpx.Timeout = MagicMock()
+
+        cls.mock_config = MagicMock()
+        cls.mock_config.MODEL_TIMEOUT_SEC = 10
+        cls.mock_config.CIRCUIT_FAILURE_THRESHOLD = 3
+        cls.mock_config.CIRCUIT_COOLDOWN_SEC = 60
+        cls.mock_config.GEMINI_API_BASE = "https://api.artemox.com"
+        cls.mock_config.GEMINI_API_KEY = "test_key"
+        cls.mock_config.PREFERRED_MODELS = ["gemini-2.0-flash"]
+        cls.mock_config.settings.DEEPSEEK_API_KEY = "deepseek_key"
+        cls.mock_config.settings.OPENAI_API_KEY = "openai_key"
+
+        # Apply patch.dict to sys.modules
+        cls.modules_patcher = patch.dict(sys.modules, {
+            "httpx": cls.mock_httpx,
+            "config": cls.mock_config,
+            "sqlalchemy": MagicMock(),
+            "sqlalchemy.ext.asyncio": MagicMock(),
+            "sqlalchemy.orm": MagicMock(),
+            "database": MagicMock(),
+            "services.gemini": MagicMock(),
+            "services.image_gen": MagicMock(),
+            "services.rag": MagicMock(),
+            "services.memory": MagicMock(),
+            "services.speech": MagicMock(),
+            "google.generativeai": MagicMock(),
+        })
+        cls.modules_patcher.start()
+
+        # Import the module under test *after* patching
+        if "services.llm_cascade" in sys.modules:
+            del sys.modules["services.llm_cascade"]
+        import services.llm_cascade
+        cls.llm_cascade = services.llm_cascade
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.modules_patcher.stop()
+
     async def asyncSetUp(self):
-        self.provider = LLMProvider(
+        self.provider = self.llm_cascade.LLMProvider(
             name="test_provider",
             api_base="https://api.test.com",
             api_key="test_key",
@@ -58,12 +65,12 @@ class TestLLMCascadeRefactor(unittest.IsolatedAsyncioTestCase):
         self.messages = [{"role": "user", "content": "hello"}]
 
         # Reset the mock client before each test
-        mock_httpx.AsyncClient.reset_mock()
+        self.mock_httpx.AsyncClient.reset_mock()
 
     async def test_sync_request_success(self):
         # Configure the mock client returned by httpx.AsyncClient()
         mock_client = AsyncMock()
-        mock_httpx.AsyncClient.return_value.__aenter__.return_value = mock_client
+        self.mock_httpx.AsyncClient.return_value.__aenter__.return_value = mock_client
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -73,7 +80,7 @@ class TestLLMCascadeRefactor(unittest.IsolatedAsyncioTestCase):
         }
         mock_client.post.return_value = mock_resp
 
-        text, tokens, err = await _chat_completion_request(
+        text, tokens, err = await self.llm_cascade._chat_completion_request(
             self.provider, "test_model", self.messages, stream=False
         )
 
@@ -83,7 +90,7 @@ class TestLLMCascadeRefactor(unittest.IsolatedAsyncioTestCase):
 
     async def test_sync_request_failure(self):
         mock_client = AsyncMock()
-        mock_httpx.AsyncClient.return_value.__aenter__.return_value = mock_client
+        self.mock_httpx.AsyncClient.return_value.__aenter__.return_value = mock_client
 
         mock_resp = MagicMock()
         mock_resp.status_code = 500
@@ -92,7 +99,7 @@ class TestLLMCascadeRefactor(unittest.IsolatedAsyncioTestCase):
         mock_resp.json.return_value = {"error": {"message": "Internal Server Error"}}
         mock_client.post.return_value = mock_resp
 
-        text, tokens, err = await _chat_completion_request(
+        text, tokens, err = await self.llm_cascade._chat_completion_request(
             self.provider, "test_model", self.messages, stream=False
         )
 
@@ -103,7 +110,7 @@ class TestLLMCascadeRefactor(unittest.IsolatedAsyncioTestCase):
 
     async def test_stream_request_success(self):
         mock_client = AsyncMock()
-        mock_httpx.AsyncClient.return_value.__aenter__.return_value = mock_client
+        self.mock_httpx.AsyncClient.return_value.__aenter__.return_value = mock_client
 
         mock_stream_resp = MagicMock()
         mock_stream_resp.status_code = 200
@@ -121,7 +128,7 @@ class TestLLMCascadeRefactor(unittest.IsolatedAsyncioTestCase):
         mock_ctx.__aexit__ = AsyncMock(return_value=None)
         mock_client.stream = MagicMock(return_value=mock_ctx)
 
-        text, tokens, err = await _chat_completion_request(
+        text, tokens, err = await self.llm_cascade._chat_completion_request(
             self.provider, "test_model", self.messages, stream=True
         )
 
@@ -131,7 +138,7 @@ class TestLLMCascadeRefactor(unittest.IsolatedAsyncioTestCase):
 
     async def test_stream_request_failure(self):
         mock_client = AsyncMock()
-        mock_httpx.AsyncClient.return_value.__aenter__.return_value = mock_client
+        self.mock_httpx.AsyncClient.return_value.__aenter__.return_value = mock_client
 
         mock_stream_resp = MagicMock()
         mock_stream_resp.status_code = 400
@@ -142,7 +149,7 @@ class TestLLMCascadeRefactor(unittest.IsolatedAsyncioTestCase):
         mock_ctx.__aexit__ = AsyncMock(return_value=None)
         mock_client.stream = MagicMock(return_value=mock_ctx)
 
-        text, tokens, err = await _chat_completion_request(
+        text, tokens, err = await self.llm_cascade._chat_completion_request(
             self.provider, "test_model", self.messages, stream=True
         )
 

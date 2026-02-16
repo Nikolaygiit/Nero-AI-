@@ -1,9 +1,10 @@
 """
 Модели базы данных (SQLAlchemy)
 """
-from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, JSON
-from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
+
+from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
 
@@ -11,7 +12,7 @@ Base = declarative_base()
 class User(Base):
     """Модель пользователя"""
     __tablename__ = 'users'
-    
+
     id = Column(Integer, primary_key=True)
     telegram_id = Column(Integer, unique=True, nullable=False, index=True)
     username = Column(String(255))
@@ -29,7 +30,7 @@ class User(Base):
 class Message(Base):
     """Модель сообщения в истории диалога"""
     __tablename__ = 'messages'
-    
+
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, nullable=False, index=True)
     role = Column(String(20), nullable=False)  # 'user' или 'assistant'
@@ -40,7 +41,7 @@ class Message(Base):
 class Stats(Base):
     """Модель статистики пользователя"""
     __tablename__ = 'stats'
-    
+
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, unique=True, nullable=False, index=True)
     requests_count = Column(Integer, default=0)
@@ -54,7 +55,7 @@ class Stats(Base):
 class Favorite(Base):
     """Модель избранного"""
     __tablename__ = 'favorites'
-    
+
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, nullable=False, index=True)
     content = Column(Text, nullable=False)
@@ -100,12 +101,12 @@ class UserFact(Base):
 class Achievement(Base):
     """Модель достижений пользователя"""
     __tablename__ = 'achievements'
-    
+
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, nullable=False, index=True)
     achievement_id = Column(String(100), nullable=False)
     unlocked_at = Column(DateTime, default=datetime.utcnow)
-    
+
     __table_args__ = (
         {'sqlite_autoincrement': True},
     )
